@@ -1,304 +1,158 @@
-#### 백엔드 접속 주소
+# Mission 18 백엔드 API 명세서 (API.md)
 
-| 구분 | 주소 | 설명 |
+이 문서는 다른 클라이언트나 FE 환경에서 Mission18 서버 API에 연결하여 기능을 제어할 때 참고할 수 있도록 작성되었습니다.
+
+#### 백엔드 기본 접속 (FastAPI)
+
+| 환경 | 주소 | 설명 |
 |---|---|---|
-| Backend Base URL (로컬) | `http://127.0.0.1:8000` | FastAPI 서버 기본 접속 주소 |
-| Swagger UI | `http://127.0.0.1:8000/docs` | API 테스트 및 스키마 확인 |
-| ReDoc | `http://127.0.0.1:8000/redoc` | 문서형 API 명세 화면 |
-| Health Check | `http://127.0.0.1:8000/health` | 서버 상태 확인 엔드포인트 |
+| Base URL (로컬) | `http://127.0.0.1:8019` | FastAPI 백엔드 서버의 기본 URL 접속 위치 (응용 시 변경 가능) |
+| Swagger UI | `http://127.0.0.1:8019/docs` | 백엔드 내장 자동화 API 테스트 사이트 |
 
-#### REST API 주소 및 파라미터
+🔥 **안내**: 본 서비스의 모든 API 통신 메커니즘은 `POST` 메서드를 사용하며, 응답은 통일된 포맷(`datalist`, `datacount`, `code`, `ok`)의 JSON으로 반환됩니다.
 
-| Method | REST API 주소 | 역할 | Path 파라미터 | Query 파라미터 | Body 파라미터(JSON) |
-|---|---|---|---|---|---|
-| GET | `/health` | 서버 상태 확인 | 없음 | 없음 | 없음 |
-| GET | `/api/v1/movies` | 영화 전체 목록 조회 (전체 필드) | 없음 | `page`, `size` | 없음 |
-| GET | `/api/v1/movies/summary` | 영화 요약 목록 조회 (프론트 목록 화면용) | 없음 | `page`, `size` | 없음 |
-| POST | `/api/v1/movies` | 영화 등록 | 없음 | 없음 | 필수: `docid`, `title` / 선택: 나머지 영화 필드 |
-| GET | `/api/v1/movies/{movieId}` | 영화 단건 상세 조회 | `movieId(int, 필수)` | 없음 | 없음 |
-| PATCH | `/api/v1/movies/{movieId}` | 영화 정보 부분 수정 (보낸 필드만 변경) | `movieId(int, 필수)` | 없음 | 선택: 수정할 영화 필드만 전달 |
-| DELETE | `/api/v1/movies/{movieId}` | 영화 삭제 (연결된 리뷰 포함) | `movieId(int, 필수)` | 없음 | 없음 |
-| GET | `/api/v1/movies/{movieId}/rating` | 영화 평균 감성 점수 및 리뷰 수 조회 | `movieId(int, 필수)` | 없음 | 없음 |
-| GET | `/api/v1/movies/{movieId}/reviews` | 영화에 달린 리뷰 목록 조회 | `movieId(int, 필수)` | 없음 | 없음 |
-| POST | `/api/v1/movies/{movieId}/reviews` | 리뷰 등록 (자동 감성 분석 포함) | `movieId(int, 필수)` | 없음 | `authorName`, `content` |
-| DELETE | `/api/v1/reviews/{reviewId}` | 리뷰 삭제 | `reviewId(int, 필수)` | 없음 | 없음 |
+---
 
-요약표의 파라미터는 가독성을 위해 축약 표기했습니다. 각 필드의 상세 타입/필수 여부는 아래 엔드포인트별 섹션을 참고하세요.
+### 공통 응답 (Common Response Format)
 
-#### 페이지네이션 사용 예시
-
-| 기능 | 요청 예시 |
-|---|---|
-| 영화 목록 1페이지(기본) | `GET /api/v1/movies` |
-| 영화 목록 2페이지, 10개씩 | `GET /api/v1/movies?page=2&size=10` |
-
-#### REST API 응답 형식 (Frontend 명세)
-
-##### 1) GET `/health`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Object | `status` | 서버 상태 (`ok`) |
-| 200 | JSON Object | `service` | 서비스 이름 |
-
-응답 예시:
+정상 응답이든 에러 응답이든 서버는 되도록 다음과 같은 기본 JSON 구조를 응답으로 내립니다:
 
 ```json
 {
-	"status": "ok",
-	"service": "Mission18 Backend"
+  "code": "OK",              // 정상이면 "OK", 에러 시 "Error"
+  "ok": true,                // 내부 요청 성공 여부 (true/false)
+  "message": "",             // 에러 발생 시의 원장 메시지
+  "datalist": [...],         // 데이터 배열 (단건 응답의 경우는 딕셔너리가 들어갈 수도 있음)
+  "datacount": 10            // `datalist`에 들어있는 데이터의 개수 또는 총 집계 카운트 결과
 }
 ```
 
-##### 2) GET `/api/v1/movies`
+---
 
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Array | `[]` | 영화 객체 배열 |
-| 200 | JSON Array | `[].<movieField>` | 아래 `Movie 객체 필드` 표 참고 |
+### REST API 엔드포인트 세부 명세
 
-응답 예시:
+#### 1. 영화 목록 조회
+- **URL**: `POST /accessdata/getmovies`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "COUNT": "10",                // (옵션) 한 번에 불러올 한계 개수
+      "START": "0",                 // (옵션) 오프셋 (페이지네이션)
+      "TITLE": "영화 제목",         // (옵션) 제목 조건 필터
+      "DIRECTOR": "감독 이름",      // (옵션) 감독 조건 필터
+      "ACTOR": "배우 이름",         // (옵션) 배우 조건 필터
+      "RELEASE_START": "YYYY-MM-DD",// (옵션) 개봉일 시작 필터
+      "RELEASE_END": "YYYY-MM-DD"   // (옵션) 개봉일 종료 필터
+  }
+  ```
+- **Response**: `datalist` 안에 영화 메타 데이터들 배열 리턴
 
-```json
-[
-	{
-		"movieId": 1,
-		"docid": "K12345",
-		"title": "영화 제목",
-		"genre": "드라마",
-		"createdAt": "2026-03-17T10:20:30"
-	}
-]
-```
+#### 2. 영화 건수만 조회 (페이징 총량용)
+- **URL**: `POST /accessdata/getmoviescount`
+- **Request Body (JSON)**: `getmovies`와 동일하지만 `COUNT`, `START` 불필요. 필터만 전송.
+- **Response**: `datacount` 값에 현재 조건문과 일치하는 총 영화 데이터 개수 리턴.
 
-##### 2-1) GET `/api/v1/movies/summary`
+#### 3. 영화 등록
+- **URL**: `POST /accessdata/createmovie`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "docid": "",              // 고유 문서 ID 문자열
+      "title": "영화 제목",     // (필수)
+      "releaseDate": "YYYY-MM-DD",  
+      "directorNm": "감독",
+      "genre": "장르",
+      "posterUrl": "포스터링크",
+      "actorNm": "배우들"
+  }
+  ```
 
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Array | `[]` | 프론트 목록용 요약 영화 배열 |
-| 200 | JSON Array | `[].movieId` | 영화 내부 PK |
-| 200 | JSON Array | `[].docid` | KMDB 문서 고유 ID |
-| 200 | JSON Array | `[].title` | 영화명 |
-| 200 | JSON Array | `[].releaseDate` | 개봉일 |
-| 200 | JSON Array | `[].directorNm` | 감독명 |
-| 200 | JSON Array | `[].genre` | 장르 |
-| 200 | JSON Array | `[].averageSentimentScore` | 평균 감성 점수 (리뷰 없으면 null) |
+#### 4. 영화 정보 수정
+- **URL**: `POST /accessdata/updatemovie`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "movieId": 1,             // (필수) 수정하려는 목표 PK 
+      "title": "수정할 영화 제목",
+      "releaseDate": "YYYY-MM-DD",
+      "directorNm": "새 감독",
+      "actorNm": "새 배우",
+      "genre": "새 장르",
+      "posterUrl": "새 포스터"
+  }
+  ```
 
-응답 예시:
+#### 5. 영화 삭제 (종속된 리뷰 모두 포함)
+- **URL**: `POST /accessdata/deletemovie`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "movieId": 1              // (필수) 삭제 대상 PK
+  }
+  ```
 
-```json
-[
-	{
-		"movieId": 1,
-		"docid": "K12345",
-		"title": "육군포병학교",
-		"releaseDate": "2000-01-01",
-		"directorNm": "방의석",
-		"genre": "군사",
-		"averageSentimentScore": null
-	}
-]
-```
+---
 
-##### 3) POST `/api/v1/movies`
+#### 6. 특정 영화에 종속된 감성 리뷰 리스트 확인
+- **URL**: `POST /accessdata/getreviews`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "movieId": 1              // (필수) 대조할 영화 PK ID 번호
+  }
+  ```
+- **Response**: `datalist` 내부에 `sentimentLabel`, `sentimentScore`, `authorName`, `content` 등이 포함된 배열 반환
 
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 201 | JSON Object | `<movieField>` | 생성된 영화 객체 (`Movie 객체 필드` 표 참고) |
+#### 7. 리뷰 등록 (이때 백그라운드 AI 평가 연동됨)
+- **URL**: `POST /accessdata/createreview`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "movieId": 1,             // (필수) 대상 영화 PK
+      "authorName": "작성자",   // (필수) 
+      "content": "이 영화 정말 재미있어요!" // (필수)
+  }
+  ```
+- **특이사항**: 서버측에서 `content` 필드 분석 후 DB에 자동으로 AI 감성 결과 스코어/라벨을 주입해줍니다. 시간 지연이 1초 이상 생길 수 있습니다.
 
-응답 예시:
+#### 8. 독립 리뷰 수정 (AI 재평가 방식)
+- **URL**: `POST /accessdata/updatereview`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "reviewId": 12,           // (필수) 고유 리뷰 PK
+      "authorName": "작성자 닉수정",
+      "content": "생각해보니 다시 보니 별로네요" 
+  }
+  ```
+- **특이사항**: 내용(`content`)이 다시 백엔드로 발송되어 AI 감성 점수가 즉시 재평가 후 교체 적용됩니다. 결괏값 또한 덮어씌워집니다.
 
-```json
-{
-	"movieId": 2,
-	"docid": "K67890",
-	"title": "새 영화",
-	"genre": "액션",
-	"createdAt": "2026-03-17T10:30:00"
-}
-```
+#### 9. 독립 리뷰 삭제
+- **URL**: `POST /accessdata/deletereview`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "reviewId": 12            // (필수) 타겟 단위 리뷰 PK
+  }
+  ```
 
-##### 4) GET `/api/v1/movies/{movieId}`
+#### 10. 모든 리뷰 통합 검색 및 필터링 기능
+- **URL**: `POST /accessdata/getallreviews`
+- **Request Body (JSON)**:
+  ```json
+  {
+      "COUNT": "10",                // (옵션)
+      "START": "0",                 // (옵션)
+      "MOVIE_TITLE": "매트릭스",    // (옵션) 연관 영화 제목 기준 검색
+      "AUTHOR_NAME": "홍길동",      // (옵션) 작성자 필터
+      "CONTENT": "재미",            // (옵션) 리뷰 내용 필터
+      "SENTIMENT_LABEL": "negative",// (옵션) 감성 검색 필터. (all, positive, neutral, negative)
+      "SENTIMENT_SCORE": "1",       // (옵션) 평점 스코어 필터 (all, 1~5 정수형 값 지원)
+      "CREATED_START": "YYYY-MM-DD",// (옵션) 리뷰 등록일 검색 범위 시작
+      "CREATED_END": "YYYY-MM-DD"   // (옵션) 리뷰 등록일 검색 범위 종료
+  }
+  ```
 
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Object | `<movieField>` | 단일 영화 객체 (`Movie 객체 필드` 표 참고) |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-##### 5) PATCH `/api/v1/movies/{movieId}`
-
-> 지정한 필드만 부분 업데이트합니다. 보내지 않은 필드는 변경되지 않습니다.
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Object | `<movieField>` | 수정된 영화 객체 (`Movie 객체 필드` 표 참고) |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-요청 예시:
-
-```json
-{
-	"genre": "액션",
-	"plot": "수정된 줄거리 내용"
-}
-```
-
-##### 6) DELETE `/api/v1/movies/{movieId}`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 204 | Empty Body | 없음 | 삭제 성공, 응답 바디 없음 |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-##### 7) GET `/api/v1/movies/{movieId}/rating`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Object | `movieId` | 영화 내부 PK |
-| 200 | JSON Object | `averageScore` | 평균 감성 점수 |
-| 200 | JSON Object | `reviewCount` | 리뷰 개수 |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-응답 예시:
-
-```json
-{
-	"movieId": 1,
-	"averageScore": 0.83,
-	"reviewCount": 12
-}
-```
-
-##### 8) GET `/api/v1/movies/{movieId}/reviews`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 200 | JSON Array | `[]` | 리뷰 객체 배열 |
-| 200 | JSON Array | `[].<reviewField>` | 아래 `Review 객체 필드` 표 참고 |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-##### 9) POST `/api/v1/movies/{movieId}/reviews`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 201 | JSON Object | `<reviewField>` | 생성된 리뷰 객체 (`Review 객체 필드` 표 참고) |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Movie not found`) |
-
-##### 10) DELETE `/api/v1/reviews/{reviewId}`
-
-| HTTP 상태 | 응답 형식 | 항목 | 의미 |
-|---|---|---|---|
-| 204 | Empty Body | 없음 | 삭제 성공, 응답 바디 없음 |
-| 404 | JSON Object | `detail` | 에러 메시지 (`Review not found`) |
-
-##### Movie 객체 필드
-
-| 항목 | 타입 | 의미 |
-|---|---|---|
-| movieId | int | 영화 내부 PK (DB 자동증가) |
-| collection | str/null | KMDB 결과 메타: 컬렉션명 |
-| pageNo | int/null | KMDB 결과 메타: 현재 페이지 |
-| numOfRows | int/null | KMDB 결과 메타: 페이지당 건수 |
-| totalCount | int/null | KMDB 결과 메타: 총 검색 건수 |
-| rowValue | int/null | KMDB 결과 메타: 결과 내 일련번호 |
-| docid | str | KMDB 문서 고유 ID |
-| kmdbMovieId | str/null | KMDB 등록ID (원본 `movieId`) |
-| movieSeq | str/null | KMDB 등록SEQ |
-| title | str | 영화명 |
-| titleEng | str/null | 영문제명 |
-| titleOrg | str/null | 원제명 |
-| titleEtc | str/null | 기타제명 |
-| directorNm | str/null | 감독명 |
-| directorEnNm | str/null | 감독명(영문) |
-| directorId | str/null | 감독등록번호 |
-| actorNm | str/null | 배우명 |
-| actorEnNm | str/null | 배우명(영문) |
-| actorId | str/null | 배우등록번호 |
-| nation | str/null | 제작국가 |
-| company | str/null | 제작사 |
-| prodYear | str/null | 제작년도 |
-| plot | str/null | 줄거리 |
-| runtime | str/null | 상영시간 |
-| rating | str/null | 대표관람등급 |
-| genre | str/null | 장르 |
-| kmdbUrl | str/null | KMDB 상세 링크 |
-| movieType | str/null | 유형구분 (원본 `type`) |
-| movieUse | str/null | 용도구분 (원본 `use`) |
-| episodes | str/null | 영상 내 에피소드 |
-| ratedYn | str/null | 심의여부 |
-| repRatDate | str/null | 대표심의일 |
-| repRlsDate | str/null | 대표개봉일 |
-| ratingMain | str/null | 대표심의정보 여부 |
-| ratingDate | str/null | 심의일 |
-| ratingNo | str/null | 심의번호 |
-| ratingGrade | str/null | 관람기준 |
-| releaseDate | str/null | 개봉일자 |
-| keywords | str/null | 키워드 |
-| posterUrl | str/null | 포스터 URL |
-| stillUrl | str/null | 스틸 이미지 URL |
-| staffNm | str/null | 스텝이름 |
-| staffRoleGroup | str/null | 스텝크레딧명 |
-| staffRole | str/null | 스텝배역 |
-| staffEtc | str/null | 스텝기타 |
-| staffId | str/null | 스텝등록번호 |
-| vodClass | str/null | VOD 구분 |
-| vodUrl | str/null | VOD URL |
-| openThtr | str/null | 개봉극장 |
-| screenArea | str/null | 관람지역 |
-| screenCnt | str/null | 스크린수 |
-| salesAcc | str/null | 누적매출액 |
-| audiAcc | str/null | 누적관람인원 |
-| statSouce | str/null | 출처 |
-| statDate | str/null | 기준일 |
-| themeSong | str/null | 주제곡 |
-| soundtrack | str/null | 삽입곡 |
-| fLocation | str/null | 촬영장소 |
-| awards1 | str/null | 영화제 수상 내역 |
-| awards2 | str/null | 기타 수상 내역 |
-| regDate | str/null | 등록일 |
-| modDate | str/null | 최종수정일 |
-| codeNm | str/null | 외부코드명 |
-| codeNo | str/null | 외부코드 |
-| commCodes | str/null | 대표외부코드 |
-| createdAt | datetime string | DB 생성 시각 (ISO 8601) |
-
-##### Review 객체 필드
-
-| 항목 | 타입 | 의미 |
-|---|---|---|
-| reviewId | int | 리뷰 PK |
-| movieId | int | 연결된 영화 내부 PK |
-| authorName | str | 작성자 이름 |
-| content | str | 리뷰 본문 |
-| sentimentLabel | str | 감성 라벨 |
-| sentimentScore | float | 감성 점수 |
-| createdAt | datetime string | 생성 시각 (ISO 8601) |
-
-##### 공통 에러 응답 형식
-
-| HTTP 상태 | 응답 예시 |
-|---|---|
-| 404 | `{ "detail": "Movie not found" }` 또는 `{ "detail": "Review not found" }` |
-| 422 | `{ "detail": [...] }` (요청 파라미터/바디 유효성 검증 실패) |
-
-#### KMDB 원본 필드명 매핑표
-
-| KMDB 원본명 (TECH 8.3) | 저장/응답 필드명 | 비고 |
-|---|---|---|
-| `movieId` | `kmdbMovieId` | DB PK `movieId(int)`와 충돌 방지 |
-| `type` | `movieType` | Python 예약어 회피 |
-| `use` | `movieUse` | 의미 명확화 |
-| `StaffNm` | `staffNm` | camelCase 소문자 통일 |
-| `StaffRole` | `staffRole` | camelCase 소문자 통일 |
-| `StaffEtc` | `staffEtc` | camelCase 소문자 통일 |
-| `StaffId` | `staffId` | camelCase 소문자 통일 |
-| `Awards1` | `awards1` | camelCase 소문자 통일 |
-| `Awards2` | `awards2` | camelCase 소문자 통일 |
-| `CodeNm` | `codeNm` | camelCase 소문자 통일 |
-| `CodeNo` | `codeNo` | camelCase 소문자 통일 |
-| `CommCodes` | `commCodes` | camelCase 소문자 통일 |
-| `Result.Collection` | `collection` | 수집 메타 |
-| `Result.PageNo` | `pageNo` | 수집 메타 |
-| `Result.NumOfRow` | `numOfRows` | 수집 메타 |
-| `Result.TotalCount` | `totalCount` | 수집 메타 |
-| `Row Value` | `rowValue` | 수집 메타 |
+#### 11. 통합 리뷰 건수 집계 확인 (페이징용 카운터)
+- **URL**: `POST /accessdata/getallreviewscount`
+- **Request Body (JSON)**: `getallreviews` 요청과 동일, 단 `COUNT` 및 `START` 값을 무시.

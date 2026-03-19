@@ -198,6 +198,7 @@ flowchart LR
     M --> DB[(MOVIES 테이블 INSERT)]
 ```
 
+- **수집 대상**: KMDB API를 통해 **1900년부터 2026년까지**의 대한민국 **국내 극영화** 전체 데이터를 타겟으로 수집
 - **수집 방식**: `Get_Movie_Data` -> `normalize_keys` -> `Clean_Text` -> `SQLiteDB.saveMovie`
 - **페이지네이션**: `listCount` 500개 단위로 루프를 돌며 대량의 영화 데이터를 안정적으로 전송
 - **기록 유의사항**: 이 파일은 프로젝트 초기 DB 구축을 위한 핵심 명세이며, 필드 매핑 로직이 포함되어 있습니다.

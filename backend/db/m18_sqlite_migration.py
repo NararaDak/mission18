@@ -1,18 +1,18 @@
+# 데이터베이스 마이그레이션 및 초기화를 수행하는 스크립트
 import os
 from app.storage.m18_sqlite import SQLiteDB
 from app.defines import APP_DIR
 
+# 초기 DB 테이블 생성 및 마이그레이션 실행
 def run_migrations() -> None:
-    """
-    데이터베이스 초기화 및 테이블 생성을 실행합니다.
-    """
     db = SQLiteDB()
-    # migration SQL 파일 경로 설정
+    # SQL 정의 파일 경로 (defines.py의 APP_DIR 기준)
     migrationPath = os.path.join(APP_DIR, "util", "m18_sqlite_migration.sql")
     
-    print(f"Starting database initialization using {migrationPath}...")
+    print(f"스키마 파일({migrationPath})을 이용해 DB 초기화 시작...")
     db.doInitDatabase(migrationPath)
-    print("Database processing completed.")
+    print("DB 마이그레이션 완료.")
 
 if __name__ == "__main__":
+    # 스크립트 직접 실행 시 마이그레이션 구동
     run_migrations()

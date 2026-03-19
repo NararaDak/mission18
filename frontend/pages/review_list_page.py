@@ -1,306 +1,198 @@
+# 전체 리뷰 목록 조회 및 필터링, 통합 관리를 담당하는 페이지 스크립트
 import math
 from calendar import monthrange
 from datetime import date, datetime
-
 import streamlit as st
-
 from call_api import CallApi
 from loading_popup import LoadingPopup
 
+# 페이지네이션 설정
 PAGE_SIZE = 10
 PAGE_GROUP_SIZE = 5
 
-
+# 현재 리뷰 목록 페이지 번호 조회
 def _getCurrentPage() -> int:
-	if "reviewListPage" not in st.session_state:
-		st.session_state["reviewListPage"] = 1
-	return int(st.session_state["reviewListPage"])
+	if "rl_reviewListPage" not in st.session_state: st.session_state["rl_reviewListPage"] = 1
+	return int(st.session_state["rl_reviewListPage"])
 
+# 현재 리뷰 목록 페이지 번호 저장
+def _setCurrentPage(page: int) -> None:
+	st.session_state["rl_reviewListPage"] = max(1, int(page))
 
-def _setCurrentPage(pageValue: int) -> None:
-	st.session_state["reviewListPage"] = max(1, int(pageValue))
+# 알림 메시지 설정
+def _setActionMessage(msg: str) -> None:
+	st.session_state["rl_reviewListActionMessage"] = msg
 
+# 특정 개월 수를 더하거나 뺀 날짜 반환
+def _addMonths(base: date, diff: int) -> date:
+	totalMonth = (base.month - 1) + diff
+	yy, mm = base.year + (totalMonth // 12), (totalMonth % 12) + 1
+	return date(yy, mm, min(base.day, monthrange(yy, mm)[1]))
 
-def _setActionMessage(messageText: str) -> None:
-	st.session_state["reviewListActionMessage"] = messageText
-
-
-def _addMonths(baseDate: date, monthDiff: int) -> date:
-	totalMonth = (baseDate.month - 1) + monthDiff
-	newYear = baseDate.year + (totalMonth // 12)
-	newMonth = (totalMonth % 12) + 1
-	maxDay = monthrange(newYear, newMonth)[1]
-	newDay = min(baseDate.day, maxDay)
-	return date(newYear, newMonth, newDay)
-
-
+# 검색 필터 초기값 보장
 def _ensureSearchDefaults() -> None:
-	todayValue = date.today()
-	if "reviewSearchMovieTitle" not in st.session_state:
-		st.session_state["reviewSearchMovieTitle"] = ""
-	if "reviewSearchAuthorName" not in st.session_state:
-		st.session_state["reviewSearchAuthorName"] = ""
-	if "reviewSearchContent" not in st.session_state:
-		st.session_state["reviewSearchContent"] = ""
-	if "reviewSearchSentimentLabel" not in st.session_state:
-		st.session_state["reviewSearchSentimentLabel"] = "all"
-	if "reviewSearchSentimentScore" not in st.session_state:
-		st.session_state["reviewSearchSentimentScore"] = "all"
-	if "reviewSearchUseDateRange" not in st.session_state:
-		st.session_state["reviewSearchUseDateRange"] = True
-	if "reviewSearchStartDate" not in st.session_state:
-		st.session_state["reviewSearchStartDate"] = _addMonths(todayValue, -3)
-	if "reviewSearchEndDate" not in st.session_state:
-		st.session_state["reviewSearchEndDate"] = _addMonths(todayValue, 3)
-	if "reviewSearchMovieTitle" not in st.session_state:
-		st.session_state["reviewSearchMovieTitle"] = ""
-	if "reviewSearchAuthorName" not in st.session_state:
-		st.session_state["reviewSearchAuthorName"] = ""
-	if "reviewSearchContent" not in st.session_state:
-		st.session_state["reviewSearchContent"] = ""
+	today = date.today()
+	if "rl_SearchMovieTitle" not in st.session_state: st.session_state["rl_SearchMovieTitle"] = ""
+	if "rl_SearchAuthorName" not in st.session_state: st.session_state["rl_SearchAuthorName"] = ""
+	if "rl_SearchContent" not in st.session_state: st.session_state["rl_SearchContent"] = ""
+	if "rl_SearchSentimentLabel" not in st.session_state: st.session_state["rl_SearchSentimentLabel"] = "all"
+	if "rl_SearchSentimentScore" not in st.session_state: st.session_state["rl_SearchSentimentScore"] = "all"
+	if "rl_SearchUseDateRange" not in st.session_state: st.session_state["rl_SearchUseDateRange"] = False
+	if "rl_SearchStartDate" not in st.session_state: st.session_state["rl_SearchStartDate"] = _addMonths(today, -3)
+	if "rl_SearchEndDate" not in st.session_state: st.session_state["rl_SearchEndDate"] = _addMonths(today, 0)
 
-
+# API 요청을 위한 필터 딕셔너리 생성
 def _getSearchFilters() -> dict[str, str]:
-	useDateRange = bool(st.session_state.get("reviewSearchUseDateRange", True))
-	startDateValue = st.session_state.get("reviewSearchStartDate")
-	endDateValue = st.session_state.get("reviewSearchEndDate")
+	useDateRange = bool(st.session_state.get("rl_SearchUseDateRange", True))
+	start, end = st.session_state.get("rl_SearchStartDate"), st.session_state.get("rl_SearchEndDate")
 	return {
-		"movieTitle": str(st.session_state.get("reviewSearchMovieTitle", "") or "").strip(),
-		"authorName": str(st.session_state.get("reviewSearchAuthorName", "") or "").strip(),
-		"content": str(st.session_state.get("reviewSearchContent", "") or "").strip(),
-		"sentimentLabel": str(st.session_state.get("reviewSearchSentimentLabel", "all")),
-		"sentimentScore": str(st.session_state.get("reviewSearchSentimentScore", "all")),
-		"createdStart": startDateValue.isoformat() if useDateRange and isinstance(startDateValue, date) else "",
-		"createdEnd": endDateValue.isoformat() if useDateRange and isinstance(endDateValue, date) else "",
+		"movieTitle": str(st.session_state.get("rl_SearchMovieTitle", "")).strip(),
+		"authorName": str(st.session_state.get("rl_SearchAuthorName", "")).strip(),
+		"content": str(st.session_state.get("rl_SearchContent", "")).strip(),
+		"sentimentLabel": str(st.session_state.get("rl_SearchSentimentLabel", "all")),
+		"sentimentScore": str(st.session_state.get("rl_SearchSentimentScore", "all")),
+		"createdStart": start.isoformat() if useDateRange and isinstance(start, date) else "",
+		"createdEnd": end.isoformat() if useDateRange and isinstance(end, date) else "",
 	}
 
+# 전체 리뷰 건수 갱신
+def _refreshTotalCount(api: CallApi) -> None:
+	with LoadingPopup("집계 중..."):
+		res = api.getAllReviewsCount(_getSearchFilters())
+	if res.get("ok"):
+		st.session_state["rl_reviewListTotalCount"] = max(0, int(res.get("totalCount", 0)))
+	st.session_state.pop("rl_reviewListCacheKey", None)
 
-def _refreshTotalCount(callApi: CallApi) -> None:
-	with LoadingPopup("리뷰 데이터를 집계 중입니다..."):
-		countResult = callApi.getAllReviewsCount(_getSearchFilters())
-	if countResult.get("ok"):
-		st.session_state["reviewListTotalCount"] = max(0, int(countResult.get("totalCount", 0)))
-	st.session_state.pop("reviewListCacheKey", None)
-
-
-def _renderReviewTable(callApi: CallApi, rows: list[dict]) -> None:
-	headerColumns = st.columns([2, 2, 4, 2, 2, 2, 1])
-	headerLabels = ["영화명", "작성자", "내용", "감성", "점수", "등록일", "관리"]
-	for headerColumn, label in zip(headerColumns, headerLabels):
-		headerColumn.markdown(f"**{label}**")
-
+# 리뷰 목록 테이블 렌더링
+def _renderReviewTable(api: CallApi, rows: list[dict]) -> None:
+	cols = st.columns([2, 2, 4, 2, 2, 2, 1])
+	for c, lbl in zip(cols, ["영화명", "작성자", "내용", "감성", "점수", "등록일", "관리"]):
+		c.markdown(f"**{lbl}**")
 	st.divider()
 
-	for rowIndex, row in enumerate(rows):
-		dataColumns = st.columns([2, 2, 4, 2, 2, 2, 1])
-		movieTitle = str(row.get("movieTitle", ""))
-		authorName = str(row.get("authorName", ""))
-		content = str(row.get("content", ""))
-		contentShort = content[:40] + "..." if len(content) > 40 else content
-		sentimentLabel = str(row.get("sentimentLabel", ""))
-		sentimentScore = row.get("sentimentScore", "")
-		try:
-			sentimentScore = int(float(sentimentScore))
-		except (ValueError, TypeError):
-			sentimentScore = ""
-		createdAt = str(row.get("createdAt", ""))[:19]
-		reviewId = int(row.get("reviewId", 0) or 0)
+	for i, row in enumerate(rows):
+		line = st.columns([2, 2, 4, 2, 2, 2, 1])
+		rid = int(row.get("reviewId", 0))
+		txt = str(row.get("content", ""))
+		txtS = (txt[:40] + "...") if len(txt) > 40 else txt
+		
+		line[0].write(row.get("movieTitle", ""))
+		line[1].write(row.get("authorName", ""))
+		line[2].write(txtS)
+		line[3].write(row.get("sentimentLabel", ""))
+		try: sc = int(float(row.get("sentimentScore", 0)))
+		except: sc = ""
+		line[4].write(str(sc))
+		line[5].write(str(row.get("createdAt", ""))[:19])
 
-		dataColumns[0].write(movieTitle)
-		dataColumns[1].write(authorName)
-		dataColumns[2].write(contentShort)
-		dataColumns[3].write(sentimentLabel)
-		dataColumns[4].write(str(sentimentScore))
-		dataColumns[5].write(createdAt)
-		with dataColumns[6]:
+		with line[6]:
 			with st.popover("⋮", use_container_width=True):
-				# 삭제 버튼은 reviewId 기준으로 한 번만 생성
-				if st.button("리뷰삭제", key=f"reviewDelete_{reviewId}", use_container_width=True):
-					st.session_state["deleteReviewId"] = reviewId
-					st.session_state["deleteReviewContent"] = contentShort
+				if st.button("삭제", key=f"rl_revDel_{rid}_{i}", use_container_width=True):
+					st.session_state["rl_delRid"] = rid
 					st.rerun()
-
-				# 삭제 확인 UI
-				if st.session_state.get("deleteReviewId") == reviewId:
-					st.warning("삭제하시겠습니까?")
-					col_confirm, col_cancel = st.columns([1,1])
-					with col_confirm:
-						if st.button("확인", key=f"reviewDeleteConfirm_{reviewId}"):
-							with LoadingPopup("리뷰 삭제 중입니다..."):
-								deleteResult = callApi.deleteReview(reviewId)
-							if deleteResult.get("ok"):
-								st.session_state.pop("reviewListCacheKey", None)
-								_refreshTotalCount(callApi)
-								_setActionMessage("리뷰 삭제 완료")
-								st.session_state.pop("deleteReviewId", None)
-								st.session_state.pop("deleteReviewContent", None)
-								st.rerun()
-							else:
-								st.error(deleteResult.get("error", "리뷰 삭제에 실패했습니다."))
-					with col_cancel:
-						if st.button("취소", key=f"reviewDeleteCancel_{reviewId}"):
-							st.session_state.pop("deleteReviewId", None)
-							st.session_state.pop("deleteReviewContent", None)
+				if st.session_state.get("rl_delRid") == rid:
+					st.warning("삭제?")
+					if st.button("확인", key=f"rl_delOk_{rid}_{i}"):
+						with LoadingPopup("삭제 중..."): res = api.deleteReview(rid)
+						if res.get("ok"):
+							st.session_state.pop("rl_reviewListCacheKey", None)
+							_refreshTotalCount(api)
+							st.session_state.pop("rl_delRid", None)
 							st.rerun()
+					if st.button("취소", key=f"rl_delNo_{rid}_{i}"):
+						st.session_state.pop("rl_delRid", None)
+						st.rerun()
 
-				# ── 리뷰 수정 버튼 및 폼 ──
-				if st.button("리뷰수정", key=f"reviewEdit_{rowIndex}", use_container_width=True):
-					st.session_state["editReviewId"] = reviewId
-					st.session_state["editReviewContent"] = content
-					st.session_state["editReviewScore"] = sentimentScore
-					st.session_state["editReviewLabel"] = sentimentLabel
-					st.session_state["editReviewMovieTitle"] = movieTitle
-					st.session_state["editReviewAuthorName"] = authorName
-					st.session_state["editReviewRowIndex"] = rowIndex
+				if st.button("수정", key=f"rl_revEdit_{rid}_{i}", use_container_width=True):
+					st.session_state["rl_editRid"] = rid
+					st.session_state["rl_editTxt"] = txt
+					st.session_state["rl_editAuth"] = str(row.get("authorName", ""))
+					st.session_state["rl_editTitle"] = str(row.get("movieTitle", ""))
+					st.rerun()
+		st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
-		# 리뷰 수정 폼 (리스트 하단에 노출)
-if "editReviewId" in st.session_state:
-	with st.form("reviewEditForm"):
-		st.subheader(f"리뷰 수정: {st.session_state.get('editReviewMovieTitle', '')}")
-		newContent = st.text_area("리뷰 내용", value=st.session_state.get("editReviewContent", ""), height=120)
-		newAuthor = st.text_input("작성자", value=st.session_state.get("editReviewAuthorName", ""))
-		submitEdit = st.form_submit_button("수정 완료")
-		cancelEdit = st.form_submit_button("취소")
-		if submitEdit:
-			with LoadingPopup("리뷰 수정 중입니다..."):
-				editResult = callApi.editReview(
-					st.session_state["editReviewId"],
-					newAuthor,
-					newContent
-				)
-			if editResult.get("ok"):
-				st.session_state.pop("reviewListCacheKey", None)
-				_setActionMessage("리뷰 수정 완료")
-				_refreshTotalCount(callApi)
-				st.session_state.pop("editReviewId", None)
+if "rl_editRid" in st.session_state:
+	with st.form("rl_reviewEditForm"):
+		st.subheader(f"리뷰 수정: {st.session_state.get('rl_editTitle')}")
+		newTxt = st.text_area("내용", value=st.session_state.get("rl_editTxt"), height=120)
+		newAuth = st.text_input("작성자", value=st.session_state.get("rl_editAuth"))
+		c1, c2 = st.columns(2)
+		if c1.form_submit_button("수정 완료"):
+			with LoadingPopup("수정 중..."):
+				res = CallApi().editReview(st.session_state["rl_editRid"], newAuth, newTxt)
+			if res.get("ok"):
+				st.session_state.pop("rl_reviewListCacheKey", None)
+				st.session_state.pop("rl_editRid", None)
 				st.rerun()
-			else:
-				st.error(editResult.get("error", "리뷰 수정에 실패했습니다."))
-		if cancelEdit:
-			st.session_state.pop("editReviewId", None)
+			else: st.error("실패")
+		if c2.form_submit_button("취소"):
+			st.session_state.pop("rl_editRid", None)
 			st.rerun()
 
-
-def _renderPagination(currentPage: int, totalPages: int, totalCount: int) -> None:
-	pageGroupStart = ((currentPage - 1) // PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1
-	pageGroupEnd = min(totalPages, pageGroupStart + PAGE_GROUP_SIZE - 1)
-	pageNumberList = list(range(pageGroupStart, pageGroupEnd + 1))
-
-	canGoPrevGroup = pageGroupStart > 1
-	canGoNextGroup = pageGroupEnd < totalPages
-
-	controlColumns = st.columns(2 + len(pageNumberList) + 2)
-
-	if controlColumns[0].button("<<", key="reviewPageFirst", disabled=currentPage <= 1):
-		_setCurrentPage(1)
-		st.rerun()
-
-	if controlColumns[1].button("<", key="reviewPagePrev", disabled=not canGoPrevGroup):
-		_setCurrentPage(pageGroupStart - 1)
-		st.rerun()
-
-	for indexValue, pageValue in enumerate(pageNumberList):
-		buttonLabel = f"**[{pageValue}]**" if pageValue == currentPage else str(pageValue)
-		if controlColumns[2 + indexValue].button(buttonLabel, key=f"reviewPage_{pageValue}"):
-			_setCurrentPage(pageValue)
-			st.rerun()
-
-	if controlColumns[2 + len(pageNumberList)].button(">", key="reviewPageNext", disabled=not canGoNextGroup):
-		_setCurrentPage(pageGroupEnd + 1)
-		st.rerun()
-
-	if controlColumns[3 + len(pageNumberList)].button(">>", key="reviewPageLast", disabled=currentPage >= totalPages):
-		_setCurrentPage(totalPages)
-		st.rerun()
-
-	st.caption(f"현재 페이지: {currentPage} / {totalPages} (총 {totalCount}건)")
-
-
-# ── 페이지 진입점 ──────────────────────────────────────────────────────────────
+def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
+	gStart = ((curr - 1) // PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1
+	gEnd = min(totalP, gStart + PAGE_GROUP_SIZE - 1)
+	pgs = list(range(gStart, gEnd + 1))
+	ctrls = st.columns(2 + len(pgs) + 2)
+	if ctrls[0].button("<<", key="rl_p_first", disabled=curr <= 1): _setCurrentPage(1); st.rerun()
+	if ctrls[1].button("<", key="rl_p_prev", disabled=gStart <= 1): _setCurrentPage(gStart - 1); st.rerun()
+	for i, p in enumerate(pgs):
+		lbl = f"**[{p}]**" if p == curr else str(p)
+		if ctrls[2+i].button(lbl, key=f"rl_p_{p}"): _setCurrentPage(p); st.rerun()
+	if ctrls[2+len(pgs)].button(">", key="rl_p_next", disabled=gEnd >= totalP): _setCurrentPage(gEnd + 1); st.rerun()
+	if ctrls[3+len(pgs)].button(">>", key="rl_p_last", disabled=curr >= totalP): _setCurrentPage(totalP); st.rerun()
+	st.caption(f"페이지: {curr}/{totalP} (총 {totalC}건)")
 
 st.subheader("리뷰 목록")
 _ensureSearchDefaults()
 
-with st.form("reviewSearchForm", clear_on_submit=False):
-	titleColumns = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
-	titleColumns[0].markdown("**영화명**")
-	titleColumns[1].markdown("**작성자**")
-	titleColumns[2].markdown("**내용**")
-	titleColumns[3].markdown("**감성**")
-	titleColumns[4].markdown("**점수**")
-	with titleColumns[5]:
-		st.checkbox("등록일", key="reviewSearchUseDateRange")
+with st.form("rl_reviewSearchForm"):
+	tCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
+	tCols[0].markdown("**영화명**"); tCols[1].markdown("**작성자**"); tCols[2].markdown("**내용**"); tCols[3].markdown("**감성**"); tCols[4].markdown("**점수**")
+	with tCols[5]: st.checkbox("등록일", key="rl_SearchUseDateRange")
 
-	inputColumns = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
-	inputColumns[0].text_input("영화명", key="reviewSearchMovieTitle", label_visibility="collapsed")
-	inputColumns[1].text_input("작성자", key="reviewSearchAuthorName", label_visibility="collapsed")
-	inputColumns[2].text_input("내용", key="reviewSearchContent", label_visibility="collapsed")
-	inputColumns[3].selectbox("감성", options=["all", "positive", "neutral", "negative"], key="reviewSearchSentimentLabel", label_visibility="collapsed")
-	inputColumns[4].selectbox("점수", options=["all", "1", "2", "3", "4", "5"], key="reviewSearchSentimentScore", label_visibility="collapsed")
-	
-	with inputColumns[5]:
-		dateColumns = st.columns([2.4, 0.3, 2.4])
-		dateColumns[0].date_input(
-			"시작일",
-			key="reviewSearchStartDate",
-			format="YYYY-MM-DD",
-			label_visibility="collapsed",
-			disabled=not bool(st.session_state.get("reviewSearchUseDateRange", True)),
-		)
-		dateColumns[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
-		dateColumns[2].date_input(
-			"종료일",
-			key="reviewSearchEndDate",
-			format="YYYY-MM-DD",
-			label_visibility="collapsed",
-			disabled=not bool(st.session_state.get("reviewSearchUseDateRange", True)),
-		)
+	iCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
+	iCols[0].text_input("영화", key="rl_SearchMovieTitle", label_visibility="collapsed")
+	iCols[1].text_input("작성자", key="rl_SearchAuthorName", label_visibility="collapsed")
+	iCols[2].text_input("내용", key="rl_SearchContent", label_visibility="collapsed")
+	iCols[3].selectbox("감성", options=["all", "positive", "neutral", "negative"], key="rl_SearchSentimentLabel", label_visibility="collapsed")
+	iCols[4].selectbox("점수", options=["all", "1", "2", "3", "4", "5"], key="rl_SearchSentimentScore", label_visibility="collapsed")
+	with iCols[5]:
+		dCols = st.columns([2.4, 0.3, 2.4])
+		dCols[0].date_input("시작", key="rl_SearchStartDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
+		dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
+		dCols[2].date_input("종료", key="rl_SearchEndDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
 
-	searchClicked = st.form_submit_button("조회", use_container_width=False)
+	srchClicked = st.form_submit_button("조회")
 
-actionMessage = st.session_state.get("reviewListActionMessage", "")
-if actionMessage:
-	st.info(actionMessage)
-	st.session_state["reviewListActionMessage"] = ""
+msg = st.session_state.get("rl_reviewListActionMessage", "")
+if msg: st.info(msg); st.session_state["rl_reviewListActionMessage"] = ""
 
-callApi = CallApi()
-searchFilters = _getSearchFilters()
+api = CallApi()
+filters = _getSearchFilters()
 
-if searchClicked:
-	_setCurrentPage(1)
+if srchClicked or "rl_reviewListTotalCount" not in st.session_state:
+	if srchClicked: _setCurrentPage(1)
+	with LoadingPopup("전체 건수 확인 중..."):
+		countRes = api.getAllReviewsCount(filters)
+	st.session_state["rl_reviewListTotalCount"] = max(0, int(countRes.get("totalCount", 0))) if countRes.get("ok") else 0
 
-if searchClicked or "reviewListTotalCount" not in st.session_state:
-	with LoadingPopup("리뷰 건수를 확인 중입니다..."):
-		countResult = callApi.getAllReviewsCount(searchFilters)
-	if countResult.get("ok"):
-		st.session_state["reviewListTotalCount"] = max(0, int(countResult.get("totalCount", 0)))
-	else:
-		st.session_state["reviewListTotalCount"] = 0
+totalC = int(st.session_state.get("rl_reviewListTotalCount", 0))
+totalP = max(1, math.ceil(totalC / PAGE_SIZE))
+currP = min(_getCurrentPage(), totalP)
+_setCurrentPage(currP)
 
-totalCount = int(st.session_state.get("reviewListTotalCount", 0))
-totalPages = max(1, math.ceil(totalCount / PAGE_SIZE))
-currentPage = _getCurrentPage()
-if currentPage > totalPages:
-	currentPage = totalPages
-	_setCurrentPage(currentPage)
-startValue = (currentPage - 1) * PAGE_SIZE
+ckey = f"rl_review_list_{currP}_{PAGE_SIZE}_{filters}"
+if srchClicked or st.session_state.get("rl_reviewListCacheKey") != ckey:
+	with LoadingPopup("조회 중..."):
+		res = api.getAllReviews(count=PAGE_SIZE, start=(currP-1)*PAGE_SIZE, filters=filters)
+		st.session_state["rl_reviewListCacheResult"], st.session_state["rl_reviewListCacheKey"] = res, ckey
+else: res = st.session_state["rl_reviewListCacheResult"]
 
-current_cache_key = f"review_list_{currentPage}_{PAGE_SIZE}_{searchFilters}"
-if searchClicked or "reviewListCacheKey" not in st.session_state or st.session_state["reviewListCacheKey"] != current_cache_key:
-	with LoadingPopup("리뷰 목록을 불러오는 중입니다..."):
-		result = callApi.getAllReviews(countValue=PAGE_SIZE, startValue=startValue, filtersData=searchFilters)
-		st.session_state["reviewListCacheResult"] = result
-		st.session_state["reviewListCacheKey"] = current_cache_key
+if not res.get("ok"): st.error("오류")
 else:
-	result = st.session_state["reviewListCacheResult"]
-
-if not result.get("ok"):
-	st.error(result.get("error", "알 수 없는 오류가 발생했습니다."))
-else:
-	rows = result.get("rows")
+	rows = res.get("rows")
 	if rows:
-		_renderReviewTable(callApi, rows)
-		_renderPagination(currentPage, totalPages, totalCount)
-	else:
-		st.info("등록된 리뷰가 없습니다.")
-
+		_renderReviewTable(api, rows)
+		_renderPagination(currP, totalP, totalC)
+	else: st.info("데이터 없음")

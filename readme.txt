@@ -8,7 +8,7 @@
 # backend 실행
 .venv\Scripts\python.exe -m backend.backend
 python -m backend/backend.py
-
+python -m backend.backend
 # frontend 실행 (streamlit)
 .venv\Scripts\python.exe -m streamlit run frontend/frontend.py
 python -m streamlit run frontend/frontend.py

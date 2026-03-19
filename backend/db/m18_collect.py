@@ -1,27 +1,24 @@
+# KMDB API에서 영화 데이터를 수집하여 DB에 저장하는 스크립트
 import requests
 import re
+import json
 from typing import Dict, Any
 
-# 다른 모듈 임포트
+# DB 처리를 위한 SQLite 인터페이스 임포트
 from app.storage.m18_sqlite import SQLiteDB
 
-# KMDB API 설정
+# KMDB API 설정 (서비스키 및 베이스 URL)
 SERVICE_KEY = "ZC6C9YMX108KA9U95O9X"
 BASE_URL = 'http://api.koreafilm.or.kr/openapi-data2/wisenut/search_api/search_json2.jsp'
 
+# 텍스트 내 KMDB 특수 태그(!HS, !HE 등) 제거
 def Clean_Text(text: str) -> str:
-    """
-    API 검색 결과 데이터의 특수 태그(!HS, !HE 등)를 제거합니다.
-    """
     if not text:
         return ""
     return re.sub(r'!HS |!HE ', '', text).strip()
 
+# JSON 데이터의 모든 키를 소문자로 정규화 (일관성 유지)
 def normalize_keys(obj: Any) -> Any:
-    """
-    JSON 데이터의 모든 키를 소문자로 변환하여 대소문자 불일치 문제를 해결합니다.
-    KMDB API 응답의 키가 대문자로 오는 경우 등을 처리합니다.
-    """
     if isinstance(obj, dict):
         return {k.lower(): normalize_keys(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -29,9 +26,7 @@ def normalize_keys(obj: Any) -> Any:
     else:
         return obj
 
-import json
-
-
+# 값을 리스트로 변환 (단일 객체인 경우 리스트로 감쌈)
 def _to_list(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [item for item in value if isinstance(item, dict)]
@@ -39,14 +34,14 @@ def _to_list(value: Any) -> list[dict[str, Any]]:
         return [value]
     return []
 
-
+# 리스트 내 객체들의 특정 키 값을 콤마로 구분된 문자열로 결합
 def _join_values(items: list[dict[str, Any]], key: str, limit: int | None = None) -> str:
     values = [str(item.get(key, "")).strip() for item in items if str(item.get(key, "")).strip()]
     if limit is not None:
         values = values[:limit]
     return ", ".join(values)
 
-
+# 범용 데이터를 텍스트로 변환 (dict/list는 JSON 문자열로)
 def _to_text(value: Any) -> str:
     if value is None:
         return ""
@@ -54,69 +49,53 @@ def _to_text(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
     return str(value)
 
+# KMDB API를 호출하여 특정 연도의 영화 데이터 조회
 def Get_Movie_Data(serviceKey: str, releaseYear: int,  startCount: int = 0, listCount: int = 100) -> Dict[str, Any]:
-    """
-    KMDB API를 호출하여 영화 데이터를 가져오는 전역 함수입니다.
-    """
     strYear = str(releaseYear)
-    
     queryParams = {
         'collection': 'kmdb_new2',
         'nation': '대한민국',
         'ServiceKey': serviceKey,
         'listCount': listCount,
         'startCount': startCount,
-        'releaseDts': strYear + '0101', # 개봉일 시작
-        'releaseDte': strYear + '1231', # 개봉일 끝
-      #  'type': '극영화'
+        'releaseDts': strYear + '0101',
+        'releaseDte': strYear + '1231',
     }
     
     try:
         response = requests.get(BASE_URL, params=queryParams)
         if 200 <= response.status_code <= 300:
-            # strict=False를 사용하여 제어 문자(줄바꿈 등)가 포함된 비표준 JSON도 허용
             return json.loads(response.text, strict=False)
-        print(f"API Error: {response.status_code}")
         return {}
     except Exception as e:
-        print(f"Exception during API call: {str(e)}")
+        print(f"API 호출 에러: {str(e)}")
         return {}
 
+# 특정 연도의 모든 영화 데이터를 페이지네이션하며 수집 및 저장
 def Collect_Movie_Data(db: SQLiteDB, year: int) -> None:
-    """
-    특정 년도의 영화 데이터를 수집하여 DB에 저장합니다. (페이지네이션 처리)
-    """
-    print(f"Collecting movies for year: {year}...")
-    
+    print(f"{year}년도 영화 데이터 수집 시작...")
     startCount = 0
-    listCount = 500 # 한 번에 가져올 개수
-    totalToCollect = 1 # 초기값 (루프 진입용)
+    listCount = 500
+    totalToCollect = 1 # 루프 진입용 초기값
     totalSaved = 0
 
     while startCount < totalToCollect:
         jsonData = Get_Movie_Data(SERVICE_KEY, year, startCount, listCount)
-        
-        if not jsonData:
-            break
+        if not jsonData: break
 
-        # 모든 키를 소문자로 정규화
+        # 키값 소문자 정규화
         jsonData = normalize_keys(jsonData)
-
-        if 'data' not in jsonData or not jsonData['data']:
-            break
+        if 'data' not in jsonData or not jsonData['data']: break
         
         dataBlock = jsonData['data'][0]
-        
-        # 첫 요청에서 전체 개수 확인
+        # 첫 페이지 조회 시 전체 개수 갱신
         if startCount == 0:
             totalToCollect = int(dataBlock.get('totalcount', 0))
-            if totalToCollect == 0:
-                break
-            print(f"Total count for {year}: {totalToCollect}")
+            if totalToCollect == 0: break
+            print(f"{year}년 총 데이터 건수: {totalToCollect}")
 
         results = dataBlock.get('result', [])
-        if not results:
-            break
+        if not results: break
 
         collectionName = str(dataBlock.get('collection', '') or '')
         pageNo = int(dataBlock.get('pageno', 0) or 0)
@@ -125,9 +104,9 @@ def Collect_Movie_Data(db: SQLiteDB, year: int) -> None:
         count = 0
         for rowIndex, movie in enumerate(results, start=startCount + 1):
             docid = movie.get('docid')
-            if not docid: 
-                continue
+            if not docid: continue
 
+            # 중첩된 데이터 구조(감독, 배우 등) 평탄화 작업
             directors = _to_list(movie.get('directors', {}).get('director', []))
             actors = _to_list(movie.get('actors', {}).get('actor', []))
             staffs = _to_list(movie.get('staffs', {}).get('staff', []))
@@ -141,16 +120,11 @@ def Collect_Movie_Data(db: SQLiteDB, year: int) -> None:
             stillRaw = str(movie.get('stlls', '') or movie.get('stills', '') or '')
             stillUrl = stillRaw.split('|')[0] if stillRaw else ''
             
-            # 데이터 정제 및 매핑
+            # DB 스키마에 맞게 데이터 매핑
             movieInfo = {
-                'collection': collectionName,
-                'pageNo': pageNo,
-                'numOfRows': numOfRows,
-                'totalCount': totalToCollect,
-                'rowValue': rowIndex,
-                'docid': docid,
-                'kmdbMovieId': movie.get('movieid'),
-                'movieSeq': movie.get('movieseq'),
+                'collection': collectionName, 'pageNo': pageNo, 'numOfRows': numOfRows,
+                'totalCount': totalToCollect, 'rowValue': rowIndex, 'docid': docid,
+                'kmdbMovieId': movie.get('movieid'), 'movieSeq': movie.get('movieseq'),
                 'title': Clean_Text(movie.get('title', 'Unknown')),
                 'titleEng': Clean_Text(movie.get('titleeng', '')),
                 'titleOrg': Clean_Text(movie.get('titleorg', '')),
@@ -181,8 +155,7 @@ def Collect_Movie_Data(db: SQLiteDB, year: int) -> None:
                 'ratingGrade': primaryRating.get('ratinggrade', '') or movie.get('ratinggrade', ''),
                 'releaseDate': releaseDate or repRlsDate,
                 'keywords': _to_text(movie.get('keywords', '')),
-                'posterUrl': posterUrl,
-                'stillUrl': stillUrl,
+                'posterUrl': posterUrl, 'stillUrl': stillUrl,
                 'staffNm': _join_values(staffs, 'staffnm', limit=5),
                 'staffRoleGroup': _join_values(staffs, 'staffrolegroup', limit=5),
                 'staffRole': _join_values(staffs, 'staffrole', limit=5),
@@ -202,41 +175,39 @@ def Collect_Movie_Data(db: SQLiteDB, year: int) -> None:
                 'fLocation': _to_text(movie.get('flocation', '')),
                 'awards1': _to_text(movie.get('awards1', '')),
                 'awards2': _to_text(movie.get('awards2', '')),
-                'regDate': movie.get('regdate', ''),
-                'modDate': movie.get('moddate', ''),
+                'regDate': movie.get('regdate', ''), 'modDate': movie.get('moddate', ''),
                 'codeNm': _to_text(movie.get('codenm', '')),
                 'codeNo': _to_text(movie.get('codeno', '')),
                 'commCodes': _to_text(movie.get('commcodes', '')),
             }
             
-            # SQLiteDB 클래스를 사용하여 저장
+            # 영화 정보 DB 저장 시도
             if db.saveMovie(movieInfo):
                 count += 1
         
         totalSaved += count
-        startCount += listCount # 다음 페이지로 이동
+        startCount += listCount # 다음 페이지 오프셋 갱신
             
-    print(f"Total Saved {totalSaved} movies for {year}.")
+    print(f"{year}년도 영화 수집 완료. (총 {totalSaved}건 저장)")
 
-
+# 테스트 수집 함수 (2000년 데이터만 대상)
 def Test_Collect():
     appDb = SQLiteDB()
     appDb.deleteAllMovies()
-    # 2000년 데이터만 테스트 수집
     Collect_Movie_Data(appDb, 2000)
-            
-    print("Test Movie collection completed.")
+    print("테스트 수집 완료.")
 
+# 전체 기간(1900~2026) 영화 데이터 수집 함수
 def All_Collect():
     appDb = SQLiteDB()
-    # 모든 데이터를 삭제
-    appDb.deleteAllMovies()
+    appDb.deleteAllMovies() # 기존 데이터 초기화
     
-    # 2000년부터 2026년까지 수집
+    # 1900년부터 2026년까지 루프를 돌며 수집 실행
     for year in range(1900, 2027):
         Collect_Movie_Data(appDb, year)
             
-    print("Movie collection completed.")
+    print("전체 영화 수집 프로세스 종료.")
 
 if __name__ == "__main__":
+    # 스크립트 실행 시 전체 수집 시작
     All_Collect()
