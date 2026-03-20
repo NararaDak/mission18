@@ -323,7 +323,7 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 
 # --- 메인 렌더링 시작 ---
 
-st.subheader("영화 목록(ver1.1)")
+st.subheader("영화 목록(ver1.3)")
 _ensureSearchDefaults()
 
 # 검색 폼 설계 (개봉일 체크박스와 날짜 입력을 폼 밖으로 분리)
@@ -342,12 +342,23 @@ with iCols[3]:
 	dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
 	dCols[2].date_input("종료", key="movieSearchEndDate", format="YYYY-MM-DD", min_value=date(1900,1,1), max_value=date(2100,12,31), label_visibility="collapsed", disabled=not st.session_state.get("movieSearchUseReleaseRange"))
 
+# 체크박스 변경 시 기존 다이얼로그 상태 초기화 (rerun 방지)
+_prev_use_range = st.session_state.get("_ml_prevUseRange")
+_curr_use_range = st.session_state.get("movieSearchUseReleaseRange", False)
+if _prev_use_range is not None and _prev_use_range != _curr_use_range:
+    _closeDialog()
+st.session_state["_ml_prevUseRange"] = _curr_use_range
+
 # 검색 버튼과 영화 추가 버튼만 폼으로 감싸서 submit 시 동작
 with st.form("movieSearchForm"):
 	btnCols = st.columns([1, 1, 8])
 	srchClicked, addClicked = btnCols[0].form_submit_button("조회", use_container_width=True), btnCols[1].form_submit_button("영화 추가", use_container_width=True)
 
-if addClicked: _openDialog("create"); st.rerun()
+if srchClicked:
+    _closeDialog()  # 검색 시 기존 다이얼로그 상태 초기화
+if addClicked:
+    _openDialog("create")
+    st.rerun()
 
 # 알림 메시지 노출
 msg = st.session_state.get("ml_movieListActionMessage", "")

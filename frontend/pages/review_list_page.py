@@ -165,9 +165,21 @@ with iCols[5]:
     dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
     dCols[2].date_input("종료", key="rl_SearchEndDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
 
+# 필터 변경 시 기존 다이얼로그/수정 상태 초기화 (rerun 방지)
+_curr_rl_use_range = st.session_state.get("rl_SearchUseDateRange", False)
+_prev_rl_use_range = st.session_state.get("_rl_prevUseRange")
+if _prev_rl_use_range is not None and _prev_rl_use_range != _curr_rl_use_range:
+    st.session_state.pop("rl_delRid", None)
+    st.session_state.pop("rl_editRid", None)
+st.session_state["_rl_prevUseRange"] = _curr_rl_use_range
+
 # 조회 버튼만 폼으로 감싸서 submit 시 동작
 with st.form("rl_reviewSearchForm"):
     srchClicked = st.form_submit_button("조회")
+    if srchClicked:
+        st.session_state.pop("rl_delRid", None)
+        st.session_state.pop("rl_editRid", None)
+
 
 msg = st.session_state.get("rl_reviewListActionMessage", "")
 if msg: st.info(msg); st.session_state["rl_reviewListActionMessage"] = ""
@@ -187,16 +199,36 @@ currP = min(_getCurrentPage(), totalP)
 _setCurrentPage(currP)
 
 ckey = f"rl_review_list_{currP}_{PAGE_SIZE}_{filters}"
-if srchClicked or st.session_state.get("rl_reviewListCacheKey") != ckey:
+cache_res = st.session_state.get("rl_reviewListCacheResult")
+cache_key = st.session_state.get("rl_reviewListCacheKey")
+if srchClicked:
+	# 조회 버튼 클릭 시에만 API 호출 및 캐시 갱신
 	with LoadingPopup("조회 중..."):
 		res = api.getAllReviews(count=PAGE_SIZE, start=(currP-1)*PAGE_SIZE, filters=filters)
 		st.session_state["rl_reviewListCacheResult"], st.session_state["rl_reviewListCacheKey"] = res, ckey
-else: res = st.session_state["rl_reviewListCacheResult"]
+else:
+	# 조회 버튼 누르기 전에는 캐시 데이터만 사용
+	if cache_res and cache_key == ckey:
+		res = cache_res
+	else:
+		# 최초 진입 시(캐시 없음) 자동 조회
+		with LoadingPopup("최초 조회 중..."):
+			res = api.getAllReviews(count=PAGE_SIZE, start=(currP-1)*PAGE_SIZE, filters=filters)
+			st.session_state["rl_reviewListCacheResult"], st.session_state["rl_reviewListCacheKey"] = res, ckey
 
-if not res.get("ok"): st.error("오류")
+if not res.get("ok"):
+	# API 실패 시 최근 성공 캐시라도 fallback
+	if cache_res and cache_res.get("ok"):
+		st.warning("API 오류, 최근 조회 데이터로 대체합니다.")
+		rows = cache_res.get("rows")
+	else:
+		st.error("오류: 데이터 없음")
+		st.info("최근 조회 데이터도 없습니다. 조건을 변경하거나 다시 시도해 주세요.")
+		rows = []
 else:
 	rows = res.get("rows")
-	if rows:
-		_renderReviewTable(api, rows)
-		_renderPagination(currP, totalP, totalC)
-	else: st.info("데이터 없음")
+if rows:
+	_renderReviewTable(api, rows)
+	_renderPagination(currP, totalP, totalC)
+else:
+	st.info("데이터 없음")

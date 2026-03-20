@@ -57,14 +57,22 @@ class OracleDbClient:
         # 1. datetime('now', 'localtime') -> SYSDATE
         sql = sql.replace("datetime('now', 'localtime')", "SYSDATE")
         
-        # 2. LIMIT n OFFSET m -> OFFSET m ROWS FETCH NEXT n ROWS ONLY
-        # OFFSET 단어가 포함된 경우의 LIMIT 변환
+        # 2. 'YYYY-MM-DD HH:MM:SS' -> TO_TIMESTAMP('...', 'YYYY-MM-DD HH24:MI:SS')
+        # SQLite용 '2024-01-01 12:00:00' 형식을 Oracle용 포맷으로 자동 치환
+        # ORA-01861 방지 목적
+        date_pattern = re.compile(r"'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})'")
+        sql = date_pattern.sub(r"TO_TIMESTAMP('\1', 'YYYY-MM-DD HH24:MI:SS')", sql)
+
+        # 3. 'YYYY-MM-DD' -> TO_DATE('...', 'YYYY-MM-DD')
+        short_date_pattern = re.compile(r"'(\d{4}-\d{2}-\d{2})'")
+        sql = short_date_pattern.sub(r"TO_DATE('\1', 'YYYY-MM-DD')", sql)
+
+        # 4. LIMIT n OFFSET m -> OFFSET m ROWS FETCH NEXT n ROWS ONLY
         pattern_limit_offset = re.compile(r'LIMIT\s+(\d+)\s+OFFSET\s+(\d+)', re.IGNORECASE)
         if pattern_limit_offset.search(sql):
             sql = pattern_limit_offset.sub(r'OFFSET \2 ROWS FETCH NEXT \1 ROWS ONLY', sql)
         
-        # 3. LIMIT n (without OFFSET) -> FETCH NEXT n ROWS ONLY
-        # 이미 위에서 매칭되지 않은 단독 LIMIT 구문
+        # 5. LIMIT n (without OFFSET) -> FETCH NEXT n ROWS ONLY
         pattern_limit = re.compile(r'LIMIT\s+(\d+)', re.IGNORECASE)
         if pattern_limit.search(sql):
             sql = pattern_limit.sub(r'FETCH NEXT \1 ROWS ONLY', sql)
