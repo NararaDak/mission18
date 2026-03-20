@@ -322,25 +322,28 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 	st.caption(f"페이지: {curr}/{totalP} (총 {totalC}건)")
 
 # --- 메인 렌더링 시작 ---
-st.subheader("영화 목록(ver1.0)")
+
+st.subheader("영화 목록(ver1.1)")
 _ensureSearchDefaults()
 
-# 검색 폼 설계
+# 검색 폼 설계 (개봉일 체크박스와 날짜 입력을 폼 밖으로 분리)
+tCols = st.columns([2, 2, 2, 6])
+tCols[0].markdown("**영화제목**"); tCols[1].markdown("**감독**"); tCols[2].markdown("**배우**")
+with tCols[3]:
+	st.checkbox("개봉일", key="movieSearchUseReleaseRange")
+
+iCols = st.columns([2, 2, 2, 6])
+iCols[0].text_input("제목", key="movieSearchTitle", label_visibility="collapsed")
+iCols[1].text_input("감독", key="movieSearchDirector", label_visibility="collapsed")
+iCols[2].text_input("배우", key="movieSearchActor", label_visibility="collapsed")
+with iCols[3]:
+	dCols = st.columns([2.4, 0.3, 2.4])
+	dCols[0].date_input("시작", key="movieSearchStartDate", format="YYYY-MM-DD", min_value=date(1900,1,1), max_value=date(2100,12,31), label_visibility="collapsed", disabled=not st.session_state.get("movieSearchUseReleaseRange"))
+	dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
+	dCols[2].date_input("종료", key="movieSearchEndDate", format="YYYY-MM-DD", min_value=date(1900,1,1), max_value=date(2100,12,31), label_visibility="collapsed", disabled=not st.session_state.get("movieSearchUseReleaseRange"))
+
+# 검색 버튼과 영화 추가 버튼만 폼으로 감싸서 submit 시 동작
 with st.form("movieSearchForm"):
-	tCols = st.columns([2, 2, 2, 6])
-	tCols[0].markdown("**영화제목**"); tCols[1].markdown("**감독**"); tCols[2].markdown("**배우**")
-	with tCols[3]: st.checkbox("개봉일", key="movieSearchUseReleaseRange")
-
-	iCols = st.columns([2, 2, 2, 6])
-	iCols[0].text_input("제목", key="movieSearchTitle", label_visibility="collapsed")
-	iCols[1].text_input("감독", key="movieSearchDirector", label_visibility="collapsed")
-	iCols[2].text_input("배우", key="movieSearchActor", label_visibility="collapsed")
-	with iCols[3]:
-		dCols = st.columns([2.4, 0.3, 2.4])
-		dCols[0].date_input("시작", key="movieSearchStartDate", format="YYYY-MM-DD", min_value=date(1900,1,1), max_value=date(2100,12,31), label_visibility="collapsed", disabled=not st.session_state.get("movieSearchUseReleaseRange"))
-		dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
-		dCols[2].date_input("종료", key="movieSearchEndDate", format="YYYY-MM-DD", min_value=date(1900,1,1), max_value=date(2100,12,31), label_visibility="collapsed", disabled=not st.session_state.get("movieSearchUseReleaseRange"))
-
 	btnCols = st.columns([1, 1, 8])
 	srchClicked, addClicked = btnCols[0].form_submit_button("조회", use_container_width=True), btnCols[1].form_submit_button("영화 추가", use_container_width=True)
 

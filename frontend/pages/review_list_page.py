@@ -144,26 +144,30 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 	st.caption(f"페이지: {curr}/{totalP} (총 {totalC}건)")
 
 st.subheader("리뷰 목록")
+
 _ensureSearchDefaults()
 
+# 등록일 체크박스와 날짜 입력을 폼 밖으로 분리
+tCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
+tCols[0].markdown("**영화명**"); tCols[1].markdown("**작성자**"); tCols[2].markdown("**내용**"); tCols[3].markdown("**감성**"); tCols[4].markdown("**점수**")
+with tCols[5]:
+    st.checkbox("등록일", key="rl_SearchUseDateRange")
+
+iCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
+iCols[0].text_input("영화", key="rl_SearchMovieTitle", label_visibility="collapsed")
+iCols[1].text_input("작성자", key="rl_SearchAuthorName", label_visibility="collapsed")
+iCols[2].text_input("내용", key="rl_SearchContent", label_visibility="collapsed")
+iCols[3].selectbox("감성", options=["all", "positive", "neutral", "negative"], key="rl_SearchSentimentLabel", label_visibility="collapsed")
+iCols[4].selectbox("점수", options=["all", "1", "2", "3", "4", "5"], key="rl_SearchSentimentScore", label_visibility="collapsed")
+with iCols[5]:
+    dCols = st.columns([2.4, 0.3, 2.4])
+    dCols[0].date_input("시작", key="rl_SearchStartDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
+    dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
+    dCols[2].date_input("종료", key="rl_SearchEndDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
+
+# 조회 버튼만 폼으로 감싸서 submit 시 동작
 with st.form("rl_reviewSearchForm"):
-	tCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
-	tCols[0].markdown("**영화명**"); tCols[1].markdown("**작성자**"); tCols[2].markdown("**내용**"); tCols[3].markdown("**감성**"); tCols[4].markdown("**점수**")
-	with tCols[5]: st.checkbox("등록일", key="rl_SearchUseDateRange")
-
-	iCols = st.columns([1.5, 1.5, 3, 1.5, 1.5, 4.5])
-	iCols[0].text_input("영화", key="rl_SearchMovieTitle", label_visibility="collapsed")
-	iCols[1].text_input("작성자", key="rl_SearchAuthorName", label_visibility="collapsed")
-	iCols[2].text_input("내용", key="rl_SearchContent", label_visibility="collapsed")
-	iCols[3].selectbox("감성", options=["all", "positive", "neutral", "negative"], key="rl_SearchSentimentLabel", label_visibility="collapsed")
-	iCols[4].selectbox("점수", options=["all", "1", "2", "3", "4", "5"], key="rl_SearchSentimentScore", label_visibility="collapsed")
-	with iCols[5]:
-		dCols = st.columns([2.4, 0.3, 2.4])
-		dCols[0].date_input("시작", key="rl_SearchStartDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
-		dCols[1].markdown("<div style='text-align:center;padding-top:0.45rem;'>~</div>", unsafe_allow_html=True)
-		dCols[2].date_input("종료", key="rl_SearchEndDate", format="YYYY-MM-DD", label_visibility="collapsed", disabled=not st.session_state.get("rl_SearchUseDateRange"))
-
-	srchClicked = st.form_submit_button("조회")
+    srchClicked = st.form_submit_button("조회")
 
 msg = st.session_state.get("rl_reviewListActionMessage", "")
 if msg: st.info(msg); st.session_state["rl_reviewListActionMessage"] = ""

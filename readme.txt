@@ -19,4 +19,6 @@ python -m streamlit run frontend/frontend.py
 # frontend 디버그 실행
 .venv\Scripts\python.exe -m debugpy --listen 5679 --wait-for-client -m streamlit run frontend/frontend.py
 
+스트릿 주소.
 
+https://mission18-8rw9slgwcramrpetoqdnrs.streamlit.app/
