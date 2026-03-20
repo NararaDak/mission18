@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.db.dbclient import DbClient
+from backend.db.dbselector import selectDb
 from backend.models.huggingface_model import HuggingFaceSentimentModel
 from backend.models.ollama_model import OllamaSentimentModel
 from common.defines import (
@@ -43,7 +44,7 @@ class Api2Db:
         if not content:
             return self._err("리뷰 내용이 필요합니다.")
 
-        client = DbClient()
+        client = selectDb()
         # 내용 변경에 따른 감성 분석 다시 수행
         sentimentLabel, sentimentScore = self._analyze_review_with_model(content)
         
@@ -201,7 +202,7 @@ class Api2Db:
 
     # 기존 모든 리뷰의 감성 분석 결과 재계산 및 업데이트
     def recalculate_all_review_sentiments(self) -> dict[str, int]:
-        client = DbClient()
+        client = selectDb()
         reviewRows = client.SelectSQL("SELECT reviewId, content FROM REVIEWS ORDER BY reviewId")
         if not reviewRows:
             return {"totalCount": 0, "updatedCount": 0}
@@ -247,7 +248,7 @@ class Api2Db:
         req_map = self._to_map(req_param)
         nstart = QS.Obj2Int(req_map.get("START"))
         ncount = QS.Obj2Int(req_map.get("COUNT")) or 10
-        client = DbClient()
+        client = selectDb()
         whereClause = self._build_movie_where_clause(req_map)
         sql = f"SELECT * FROM MOVIES{whereClause} ORDER BY repRlsDate DESC LIMIT {ncount} OFFSET {nstart}"
         return client.SelectSQL(sql)
@@ -255,7 +256,7 @@ class Api2Db:
     # 검색 조건에 맞는 영화 총 개수 확인
     def getMoviesCount(self, req_param):
         req_map = self._to_map(req_param)
-        client = DbClient()
+        client = selectDb()
         whereClause = self._build_movie_where_clause(req_map)
         sql = f"SELECT COUNT(*) AS count FROM MOVIES{whereClause}"
         result = client.SelectSQL(sql)
@@ -264,7 +265,7 @@ class Api2Db:
     # 신규 영화 등록
     def createMovie(self, req_param):
         req_map = self._to_map(req_param)
-        client = DbClient()
+        client = selectDb()
         docId = self._to_sql_text(req_map.get("docid")) or self._make_unique_docid(client)
         
         title = self._to_sql_text(req_map.get("title"))
@@ -289,7 +290,7 @@ class Api2Db:
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
         if movieId <= 0: raise ValueError("movieId는 필수입니다.")
-        client = DbClient()
+        client = selectDb()
         client.ExecuteSQL(f"DELETE FROM REVIEWS WHERE movieId = {movieId}")
         countMap = {}
         client.ExecuteSQLEx(f"DELETE FROM MOVIES WHERE movieId = {movieId}", countMap)
@@ -300,7 +301,7 @@ class Api2Db:
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
         if movieId <= 0: raise ValueError("movieId는 필수입니다.")
-        client = DbClient()
+        client = selectDb()
         currentRow = self._get_movie_by_id(client, movieId)
 
         title = self._to_sql_text(req_map.get("title"))
@@ -329,7 +330,7 @@ class Api2Db:
         content = self._to_sql_text(req_map.get("content"))
         if not author or not content: raise ValueError("작성자와 내용은 필수입니다.")
 
-        client = DbClient()
+        client = selectDb()
         self._get_movie_by_id(client, movieId) # 영화 존재 확인
         label, score = self._analyze_review_with_model(str(req_map.get("content")).strip())
         
@@ -345,8 +346,8 @@ class Api2Db:
     def getReviews(self, req_param):
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
-        client = DbClient()
-        sql = f"SELECT *, CAST(sentimentScore AS INTEGER) AS sentimentScore FROM REVIEWS WHERE movieId={movieId} ORDER BY reviewId DESC"
+        client = selectDb()
+        sql = f"SELECT REVIEWS.*, CAST(sentimentScore AS INTEGER) AS sentimentScoreT FROM REVIEWS WHERE movieId={movieId} ORDER BY reviewId DESC"
         return client.SelectSQL(sql)
 
     # 전체 리뷰 조회를 위한 WHERE 절 생성
@@ -376,7 +377,7 @@ class Api2Db:
         nstart = QS.Obj2Int(req_map.get("START"))
         ncount = QS.Obj2Int(req_map.get("COUNT")) or 10
         whereClause = self._build_review_where_clause(req_map)
-        client = DbClient()
+        client = selectDb()
         sql = (
             "SELECT r.*, m.title AS movieTitle FROM REVIEWS r LEFT JOIN MOVIES m ON r.movieId = m.movieId "
             f"{whereClause} ORDER BY r.reviewId DESC LIMIT {ncount} OFFSET {nstart}"
@@ -387,7 +388,7 @@ class Api2Db:
     def getAllReviewsCount(self, req_param):
         req_map = self._to_map(req_param)
         whereClause = self._build_review_where_clause(req_map)
-        client = DbClient()
+        client = selectDb()
         sql = f"SELECT COUNT(*) AS count FROM REVIEWS r LEFT JOIN MOVIES m ON r.movieId = m.movieId{whereClause}"
         result = client.SelectSQL(sql)
         return result[0]["count"] if result else 0
@@ -396,7 +397,7 @@ class Api2Db:
     def deleteReview(self, req_param):
         req_map = self._to_map(req_param)
         reviewId = QS.Obj2Int(req_map.get("reviewId"))
-        client = DbClient()
+        client = selectDb()
         countMap = {}
         client.ExecuteSQLEx(f"DELETE FROM REVIEWS WHERE reviewId = {reviewId}", countMap)
-        return int(countMap.get("executeCount", 0)) > 0
+        return int(countMap.get("executeCount", 0)) > 0

@@ -1,5 +1,7 @@
 # 데이터베이스 마이그레이션 및 초기화를 수행하는 스크립트
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.storage.m18_sqlite import SQLiteDB
 from app.defines import APP_DIR
 

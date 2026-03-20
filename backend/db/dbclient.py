@@ -16,20 +16,37 @@ class DbClient:
         return sqlite3.connect(self.db_path)
 
     # SELECT 쿼리 실행 후 결과를 딕셔너리 리스트로 반환
-    def SelectSQL(self, sql: str) -> list[dict[str, Any]]:
+    def SelectSQL(self, sql: str, params: Any = None) -> list[dict[str, Any]]:
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
-            cur.execute(sql)
+            if params is not None:
+                cur.execute(sql, params)
+            else:
+                cur.execute(sql)
             return [dict(row) for row in cur.fetchall()]
 
     # 단일 INSERT/UPDATE/DELETE 쿼리 실행
-    def ExecuteSQL(self, sql: str) -> bool:
+    def ExecuteSQL(self, sql: str, params: Any = None) -> bool:
         with self._connect() as conn:
             cur = conn.cursor()
-            cur.execute(sql)
+            if params is not None:
+                cur.execute(sql, params)
+            else:
+                cur.execute(sql)
             conn.commit()
         return True
+
+    # 다중 데이터 일괄 실행
+    def ExecuteMany(self, sql: str, data_list: list[Any]) -> int:
+        if not data_list:
+            return 0
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.executemany(sql, data_list)
+            count = cur.rowcount
+            conn.commit()
+        return count
 
     # 배치 처리를 위해 쿼리 큐에 추가
     def AddSQL(self, sql: str) -> None:
