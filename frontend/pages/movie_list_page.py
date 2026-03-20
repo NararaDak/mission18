@@ -322,7 +322,7 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 	st.caption(f"페이지: {curr}/{totalP} (총 {totalC}건)")
 
 # --- 메인 렌더링 시작 ---
-st.subheader("영화 목록")
+st.subheader("영화 목록(ver1.0)")
 _ensureSearchDefaults()
 
 # 검색 폼 설계

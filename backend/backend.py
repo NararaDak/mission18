@@ -174,7 +174,9 @@ def Update_Review(req_param: str | dict[str, Any] = Body(...)) -> dict[str, Any]
 # 라우터 등록 및 서버 실행 설정
 app.include_router(router)
 
+
 if __name__ == "__main__":
     import uvicorn
-    # 로컬 호스트 8009 포트로 서버 구동
-    uvicorn.run(app, host="127.0.0.1", port=8009)
+    # 로컬 호스트 8119 포트로 서버 구동
+    uvicorn.run(app, host="0.0.0.0", port=8119)
+
