@@ -26,9 +26,9 @@ def Get_Ini_Config() -> configparser.ConfigParser:
     return configData
 
 # INI 문자열 값 조회
-def Get_Ini_Value(sectionName: str, keyName: str, fallbackValue: str = "") -> str:
+def Get_Ini_Value(sectionName: str, keyName: str, fallback: str = "") -> str:
     configData = Get_Ini_Config()
-    return configData.get(sectionName, keyName, fallback=fallbackValue)
+    return configData.get(sectionName, keyName, fallback=fallback)
 
 # INI 정수 값 조회
 def Get_Ini_Int_Value(sectionName: str, keyName: str, fallbackValue: int) -> int:

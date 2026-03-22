@@ -6,6 +6,7 @@ from typing import Any
 import os
 import requests
 
+
 class CallApi:
     # API 객체 초기화. 타임아웃 및 백엔드 접속 URL 설정
     def __init__(self, timeoutSec: int = 30):

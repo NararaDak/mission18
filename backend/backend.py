@@ -1,12 +1,11 @@
 # FastAPI 기반 백엔드 서버 메인 파일
 from __future__ import annotations
 from typing import Any
+
 from fastapi import APIRouter, Body, FastAPI
 from backend.api2db import Api2Db
 from common.util import error_response, ok_response
-
-# /accessdata 경로를 사용하는 라우터 설정
-router = APIRouter(prefix="/accessdata", tags=["accessdata"])
+router = APIRouter(prefix="/mission18/accessdata", tags=["accessdata"])
 app = FastAPI(title="Mission18 Backend")
 
 # 성공 응답 포맷 생성 함수
@@ -176,6 +175,7 @@ app.include_router(router)
 
 
 if __name__ == "__main__":
+    print("(1.0)Mission18 Backend Server is running on http://localhost:8119")
     import uvicorn
     # 로컬 호스트 8119 포트로 서버 구동
     uvicorn.run(app, host="0.0.0.0", port=8119)

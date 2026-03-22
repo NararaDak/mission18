@@ -1,3 +1,4 @@
+
 # 프로젝트 전역 상수 및 설정 경로 정의 파일
 import os
 
@@ -53,4 +54,4 @@ DEFAULT_SENTIMENT_PROVIDER = SENTIMENT_PROVIDER_HUGGINGFACE
 DEFAULT_HUGGINGFACE_MODEL = "cardiffnlp/twitter-xlm-roberta-base-sentiment"
 DEFAULT_OLLAMA_MODEL = "llama3.1:8b"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_OLLAMA_TIMEOUT_SEC = 30
+DEFAULT_OLLAMA_TIMEOUT_SEC = 30
