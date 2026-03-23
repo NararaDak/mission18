@@ -14,14 +14,27 @@ class CallApi:
         self.__BackendUrl = self._getBackendUrl()
 
     # 리뷰 수정 API 호출
-    def editReview(self, reviewId: int, authorName: str, content: str) -> dict[str, Any]:
+    def editReview(self, reviewId: int, authorName: str, content: str, userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/updatereview"
         requestBody = {
             "reviewId": reviewId,
             "authorName": authorName,
             "content": content,
+            "userId": userId,
         }
         return self._postData(apiUrl, requestBody, "리뷰 수정 실패")
+
+    # 로그인 API 호출
+    def login(self, userId: str, userPw: str) -> dict[str, Any]:
+        apiUrl = f"{self.__BackendUrl}/accessdata/login"
+        body = {"userId": userId, "userPw": userPw}
+        return self._postData(apiUrl, body, "로그인 실패")
+
+    # 회원가입 API 호출
+    def createUser(self, userId: str, userName: str, userPw: str) -> dict[str, Any]:
+        apiUrl = f"{self.__BackendUrl}/accessdata/createuser"
+        body = {"userId": userId, "userName": userName, "userPw": userPw}
+        return self._postData(apiUrl, body, "회원가입 실패")
 
     # API 응답 데이터를 리스트 형식으로 정규화
     @staticmethod
@@ -100,32 +113,34 @@ class CallApi:
         except requests.RequestException as ex: return {"ok": False, "error": f"요청 실패: {ex}"}
 
     # 신규 영화 정보 등록 API 호출
-    def createMovie(self, title: str, releaseDate: str, docId: str = "", director: str = "", genre: str = "", posterUrl: str = "", actor: str = "") -> dict[str, Any]:
+    def createMovie(self, title: str, releaseDate: str, docId: str = "", director: str = "", genre: str = "", posterUrl: str = "", actor: str = "", userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/createmovie"
         body = {
             "docid": docId, "title": title, "releaseDate": releaseDate,
             "directorNm": director, "genre": genre, "posterUrl": posterUrl, "actorNm": actor,
+            "userId": userId,
         }
         return self._postData(apiUrl, body, "영화 등록 실패")
 
     # 기존 영화 정보 수정 API 호출
-    def updateMovie(self, movieIdx: int, title: str, releaseDate: str, director: str = "", actor: str = "", genre: str = "", posterUrl: str = "") -> dict[str, Any]:
+    def updateMovie(self, movieIdx: int, title: str, releaseDate: str, director: str = "", actor: str = "", genre: str = "", posterUrl: str = "", userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/updatemovie"
         body = {
             "movieId": movieIdx, "title": title, "releaseDate": releaseDate,
             "directorNm": director, "actorNm": actor, "genre": genre, "posterUrl": posterUrl,
+            "userId": userId,
         }
         return self._postData(apiUrl, body, "영화 수정 실패")
 
     # 영화 삭제 API 호출
-    def deleteMovie(self, movieIdx: int) -> dict[str, Any]:
+    def deleteMovie(self, movieIdx: int, userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/deletemovie"
-        return self._postData(apiUrl, {"movieId": movieIdx}, "영화 삭제 실패")
+        return self._postData(apiUrl, {"movieId": movieIdx, "userId": userId}, "영화 삭제 실패")
 
     # 신규 리뷰 및 감성 분석 요청 API 호출
-    def createReview(self, movieIdx: int, author: str, content: str) -> dict[str, Any]:
+    def createReview(self, movieIdx: int, author: str, content: str, userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/createreview"
-        body = {"movieId": movieIdx, "authorName": author, "content": content}
+        body = {"movieId": movieIdx, "authorName": author, "content": content, "userId": userId}
         return self._postData(apiUrl, body, "리뷰 등록 실패")
 
     # 특정 영화에 대한 리뷰 목록 조회 API 호출
@@ -181,9 +196,9 @@ class CallApi:
         except requests.RequestException as ex: return {"ok": False, "error": f"요청 실패: {ex}"}
 
     # 리뷰 삭제 API 호출
-    def deleteReview(self, reviewIdx: int) -> dict[str, Any]:
+    def deleteReview(self, reviewIdx: int, userId: str = "") -> dict[str, Any]:
         apiUrl = f"{self.__BackendUrl}/accessdata/deletereview"
-        return self._postData(apiUrl, {"reviewId": reviewIdx}, "리뷰 삭제 실패")
+        return self._postData(apiUrl, {"reviewId": reviewIdx, "userId": userId}, "리뷰 삭제 실패")
 
     # POST 방식의 API 요청 처리를 위한 내부 공통 메서드
     def _postData(self, apiUrl: str, body: dict[str, Any], failMsg: str) -> dict[str, Any]:

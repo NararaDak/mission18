@@ -156,7 +156,10 @@ class OracleDbClient:
             "SENTIMENTSCORE": "sentimentScore",
             "TOTALCOUNT": "totalCount",
             "UPDATEDCOUNT": "updatedCount",
-            "MOVIETITLE": "movieTitle"
+            "MOVIETITLE": "movieTitle",
+            "USER_ID": "user_id",
+            "USER_NAME": "user_name",
+            "ADDEDBY": "addedBy"
         }
         return [key_map.get(c, c) for c in columns]
 

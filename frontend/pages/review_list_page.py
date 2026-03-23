@@ -63,6 +63,55 @@ def _refreshTotalCount(api: CallApi) -> None:
 		st.session_state["rl_reviewListTotalCount"] = max(0, int(res.get("totalCount", 0)))
 	st.session_state.pop("rl_reviewListCacheKey", None)
 
+# 리뷰 삭제 확인 다이얼로그
+@st.dialog("리뷰 삭제", width="small")
+def _showDeleteReviewDialog(api: CallApi, rid: int) -> None:
+	st.warning("이 리뷰를 정말 삭제하시겠습니까?")
+	c1, c2 = st.columns(2)
+	userId = st.session_state.get("user_id", "")
+	if c1.button("확인", key=f"rl_delOk_{rid}", use_container_width=True):
+		with LoadingPopup("삭제 중..."):
+			res = api.deleteReview(rid, userId=userId)
+		if res.get("ok"):
+			st.session_state.pop("rl_reviewListCacheKey", None)
+			_refreshTotalCount(api)
+			_setActionMessage("리뷰가 삭제되었습니다.")
+			st.session_state.pop("rl_dialogType", None)
+			st.session_state.pop("rl_dialogData", None)
+			st.rerun()
+		else:
+			st.error(res.get("error", "삭제 실패"))
+	if c2.button("취소", key=f"rl_delNo_{rid}", use_container_width=True):
+		st.session_state.pop("rl_dialogType", None)
+		st.session_state.pop("rl_dialogData", None)
+		st.rerun()
+
+# 리뷰 수정 다이얼로그
+@st.dialog("리뷰 수정", width="large")
+def _showEditReviewDialog(api: CallApi, rid: int, oldTxt: str, oldAuth: str, movieTitle: str) -> None:
+	st.subheader(f"리뷰 수정: {movieTitle}")
+	with st.form("rl_reviewEditForm_dialog"):
+		userName = st.session_state.get("user_name", "")
+		st.write(f"**작성자:** {userName}")
+		newTxt = st.text_area("내용", value=oldTxt, height=120)
+		c1, c2 = st.columns(2)
+		userId = st.session_state.get("user_id", "")
+		if c1.form_submit_button("수정 완료", use_container_width=True):
+			with LoadingPopup("수정 중..."):
+				res = api.editReview(rid, userName, newTxt, userId=userId)
+			if res.get("ok"):
+				st.session_state.pop("rl_reviewListCacheKey", None)
+				_setActionMessage("리뷰가 수정되었습니다.")
+				st.session_state.pop("rl_dialogType", None)
+				st.session_state.pop("rl_dialogData", None)
+				st.rerun()
+			else:
+				st.error(res.get("error", "수정 실패"))
+		if c2.form_submit_button("취소", use_container_width=True):
+			st.session_state.pop("rl_dialogType", None)
+			st.session_state.pop("rl_dialogData", None)
+			st.rerun()
+
 # 리뷰 목록 테이블 렌더링
 def _renderReviewTable(api: CallApi, rows: list[dict]) -> None:
 	cols = st.columns([2, 2, 4, 2, 2, 2, 1])
@@ -86,48 +135,23 @@ def _renderReviewTable(api: CallApi, rows: list[dict]) -> None:
 		line[5].write(str(row.get("createdAt", ""))[:19])
 
 		with line[6]:
-			with st.popover("⋮", use_container_width=True):
-				if st.button("삭제", key=f"rl_revDel_{rid}_{i}", use_container_width=True):
-					st.session_state["rl_delRid"] = rid
-					st.rerun()
-				if st.session_state.get("rl_delRid") == rid:
-					st.warning("삭제?")
-					if st.button("확인", key=f"rl_delOk_{rid}_{i}"):
-						with LoadingPopup("삭제 중..."): res = api.deleteReview(rid)
-						if res.get("ok"):
-							st.session_state.pop("rl_reviewListCacheKey", None)
-							_refreshTotalCount(api)
-							st.session_state.pop("rl_delRid", None)
-							st.rerun()
-					if st.button("취소", key=f"rl_delNo_{rid}_{i}"):
-						st.session_state.pop("rl_delRid", None)
+			addedBy = str(row.get("addedBy") or "").strip()
+			userId = st.session_state.get("user_id", "")
+			# 본인이 작성한 리뷰 또는 관리자만 수정/삭제 허용 (11번 요구사항)
+			if addedBy == userId or st.session_state.get("user_name") == "관리자":
+				with st.popover("⋮", use_container_width=True):
+					if st.button("수정", key=f"rl_revEdit_{rid}_{i}", use_container_width=True):
+						st.session_state["rl_dialogType"] = "edit"
+						st.session_state["rl_dialogData"] = row
 						st.rerun()
-
-				if st.button("수정", key=f"rl_revEdit_{rid}_{i}", use_container_width=True):
-					st.session_state["rl_editRid"] = rid
-					st.session_state["rl_editTxt"] = txt
-					st.session_state["rl_editAuth"] = str(row.get("authorName", ""))
-					st.session_state["rl_editTitle"] = str(row.get("movieTitle", ""))
-					st.rerun()
+					if st.button("삭제", key=f"rl_revDel_{rid}_{i}", use_container_width=True):
+						st.session_state["rl_dialogType"] = "delete"
+						st.session_state["rl_dialogData"] = row
+						st.rerun()
+			else:
+				st.write("")
 		st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
-if "rl_editRid" in st.session_state:
-	with st.form("rl_reviewEditForm"):
-		st.subheader(f"리뷰 수정: {st.session_state.get('rl_editTitle')}")
-		newTxt = st.text_area("내용", value=st.session_state.get("rl_editTxt"), height=120)
-		newAuth = st.text_input("작성자", value=st.session_state.get("rl_editAuth"))
-		c1, c2 = st.columns(2)
-		if c1.form_submit_button("수정 완료"):
-			with LoadingPopup("수정 중..."):
-				res = CallApi().editReview(st.session_state["rl_editRid"], newAuth, newTxt)
-			if res.get("ok"):
-				st.session_state.pop("rl_reviewListCacheKey", None)
-				st.session_state.pop("rl_editRid", None)
-				st.rerun()
-			else: st.error("실패")
-		if c2.form_submit_button("취소"):
-			st.session_state.pop("rl_editRid", None)
-			st.rerun()
 
 def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 	gStart = ((curr - 1) // PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1
@@ -186,6 +210,14 @@ if msg: st.info(msg); st.session_state["rl_reviewListActionMessage"] = ""
 
 api = CallApi()
 filters = _getSearchFilters()
+
+# 다이얼로그 노출 처리
+rl_dtype = st.session_state.get("rl_dialogType")
+rl_drow = st.session_state.get("rl_dialogData")
+if rl_dtype == "edit" and rl_drow:
+	_showEditReviewDialog(api, int(rl_drow.get("reviewId", 0)), str(rl_drow.get("content", "")), str(rl_drow.get("authorName", "")), str(rl_drow.get("movieTitle", "")))
+elif rl_dtype == "delete" and rl_drow:
+	_showDeleteReviewDialog(api, int(rl_drow.get("reviewId", 0)))
 
 if srchClicked or "rl_reviewListTotalCount" not in st.session_state:
 	if srchClicked: _setCurrentPage(1)

@@ -117,3 +117,12 @@ ALTER TABLE movies MODIFY (titleEtc VARCHAR2(4000));
 
 -- 인덱스 추가
 CREATE INDEX idx_reviews_movieId ON reviews(movieId);
+
+-- 사용자 관리 테이블
+CREATE TABLE movie_user (
+    user_id VARCHAR2(32) PRIMARY KEY
+        CHECK (LENGTH(user_id) >= 4 AND LENGTH(user_id) <= 32),
+    user_name VARCHAR2(100) NOT NULL,
+    user_pw VARCHAR2(64) NOT NULL
+        CHECK (LENGTH(user_pw) >= 6 AND LENGTH(user_pw) <= 64)
+);

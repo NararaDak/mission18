@@ -29,12 +29,13 @@ class Api2Db:
         # 감성 분석 모델 인스턴스 캐시
         self._sentimentModelCache: dict[str, Any] = {}
 
-    # 리뷰 수정 처리 (감성 분석 재실행 포함)
+    # 리뷰 수정 처리 (감성 분석 재실행 및 소유권 확인 포함)
     def editReview(self, req_param: dict[str, Any]) -> dict[str, Any]:
         req_map = self._to_map(req_param)
         reviewId = int(req_map.get("reviewId") or req_map.get("id") or 0)
         authorName = str(req_map.get("authorName") or req_map.get("author") or "").strip()
         content = str(req_map.get("content") or "").strip()
+        userId = str(req_map.get("userId") or "").strip()
         
         # 필수 인자 검증
         if reviewId <= 0:
@@ -45,6 +46,15 @@ class Api2Db:
             return self._err("리뷰 내용이 필요합니다.")
 
         client = selectDb()
+        
+        # 소유권 확인 (11번 요구사항: 본인 또는 관리자만)
+        checkRow = client.SelectSQL(f"SELECT addedBy FROM REVIEWS WHERE reviewId = {reviewId} LIMIT 1")
+        if checkRow:
+            db_addedBy = str(checkRow[0].get("addedBy") or "").strip()
+            # 소유자가 지정되어 있고, 요청자와 다르며, 요청자가 관리자가 아닌 경우 거부
+            if db_addedBy and db_addedBy != userId and userId != "admin01":
+                return self._err("자신이 작성한 리뷰만 수정할 수 있습니다.")
+
         # 내용 변경에 따른 감성 분석 다시 수행
         sentimentLabel, sentimentScore = self._analyze_review_with_model(content)
         
@@ -61,6 +71,47 @@ class Api2Db:
         if updated:
             return self._ok({"reviewId": reviewId})
         return self._err("리뷰 수정에 실패했습니다.")
+
+    # 로그인 처리
+    def login(self, req_param: dict[str, Any]) -> dict[str, Any]:
+        req_map = self._to_map(req_param)
+        userId = str(req_map.get("userId")).strip()
+        userPw = str(req_map.get("userPw")).strip()
+        
+        if not userId or not userPw:
+            return self._err("아이디와 비밀번호를 입력하세요.")
+            
+        client = selectDb()
+        sql = f"SELECT user_id, user_name FROM movie_user WHERE user_id = '{self._to_sql_text(userId)}' AND user_pw = '{self._to_sql_text(userPw)}' LIMIT 1"
+        rows = client.SelectSQL(sql)
+        
+        if rows:
+            return self._ok({"userId": rows[0]["user_id"], "userName": rows[0]["user_name"]})
+        return self._err("아이디 또는 비밀번호가 일치하지 않습니다.")
+
+    # 회원 가입 처리
+    def createUser(self, req_param: dict[str, Any]) -> dict[str, Any]:
+        req_map = self._to_map(req_param)
+        userId = str(req_map.get("userId")).strip()
+        userName = str(req_map.get("userName") or userId).strip()
+        userPw = str(req_map.get("userPw")).strip()
+        
+        if len(userId) < 4: return self._err("아이디는 4자 이상이어야 합니다.")
+        if len(userPw) < 6: return self._err("비밀번호는 6자 이상이어야 합니다.")
+        
+        client = selectDb()
+        # 중복 확인
+        exist = client.SelectSQL(f"SELECT 1 FROM movie_user WHERE user_id = '{self._to_sql_text(userId)}' LIMIT 1")
+        if exist:
+            return self._err("이미 사용 중인 아이디입니다.")
+            
+        insertSql = (
+            "INSERT INTO movie_user (user_id, user_name, user_pw) "
+            f"VALUES ('{self._to_sql_text(userId)}', '{self._to_sql_text(userName)}', '{self._to_sql_text(userPw)}')"
+        )
+        if client.ExecuteSQL(insertSql):
+            return self._ok({"userId": userId})
+        return self._err("회원 가입에 실패했습니다.")
 
     # 성공 응답 생성 유틸
     def _ok(self,extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -262,9 +313,10 @@ class Api2Db:
         result = client.SelectSQL(sql)
         return result[0]["count"] if result else 0
 
-    # 신규 영화 등록
+    # 신규 영화 등록 (작성자 정보 포함)
     def createMovie(self, req_param):
         req_map = self._to_map(req_param)
+        userId = str(req_map.get("userId") or "").strip()
         client = selectDb()
         docId = self._to_sql_text(req_map.get("docid")) or self._make_unique_docid(client)
         
@@ -278,31 +330,47 @@ class Api2Db:
         poster = self._to_sql_text(req_map.get("posterUrl"))
 
         insertSql = (
-            "INSERT INTO MOVIES (docid, title, directorNm, actorNm, genre, posterUrl, releaseDate, repRlsDate) "
-            f"VALUES ('{docId}', '{title}', '{dirNm}', '{actNm}', '{genre}', '{poster}', '{relDate}', '{relDate}')"
+            "INSERT INTO MOVIES (docid, title, directorNm, actorNm, genre, posterUrl, releaseDate, repRlsDate, addedBy) "
+            f"VALUES ('{docId}', '{title}', '{dirNm}', '{actNm}', '{genre}', '{poster}', '{relDate}', '{relDate}', '{self._to_sql_text(userId)}')"
         )
         client.ExecuteSQL(insertSql)
         created = client.SelectSQL(f"SELECT * FROM MOVIES WHERE docid = '{docId}' LIMIT 1")
         return created[0] if created else {}
 
-    # 영화 삭제 (연관 리뷰도 함께 삭제)
+    # 영화 삭제 (소유권 확인 후 연관 리뷰도 함께 삭제)
     def deleteMovie(self, req_param):
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
+        userId = str(req_map.get("userId") or "").strip()
         if movieId <= 0: raise ValueError("movieId는 필수입니다.")
+        
         client = selectDb()
+        # 소유권 확인 (11번 요구사항: 본인 또는 관리자만)
+        checkRow = client.SelectSQL(f"SELECT addedBy FROM MOVIES WHERE movieId = {movieId} LIMIT 1")
+        if checkRow:
+            db_addedBy = str(checkRow[0].get("addedBy") or "").strip()
+            if db_addedBy and db_addedBy != userId and userId != "admin01":
+                raise ValueError("자신이 등록한 영화만 삭제할 수 있습니다.")
+
         client.ExecuteSQL(f"DELETE FROM REVIEWS WHERE movieId = {movieId}")
         countMap = {}
         client.ExecuteSQLEx(f"DELETE FROM MOVIES WHERE movieId = {movieId}", countMap)
         return int(countMap.get("executeCount", 0)) > 0
 
-    # 영화 정보 업데이트
+    # 영화 정보 업데이트 (소유권 확인 포함)
     def updateMovie(self, req_param):
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
+        userId = str(req_map.get("userId") or "").strip()
         if movieId <= 0: raise ValueError("movieId는 필수입니다.")
+        
         client = selectDb()
         currentRow = self._get_movie_by_id(client, movieId)
+        
+        # 소유권 확인 (11번 요구사항: 본인 또는 관리자만)
+        db_addedBy = str(currentRow.get("addedBy") or "").strip()
+        if db_addedBy and db_addedBy != userId and userId != "admin01":
+            raise ValueError("자신이 등록한 영화만 수정할 수 있습니다.")
 
         title = self._to_sql_text(req_map.get("title"))
         if not title: raise ValueError("title은 필수입니다.")
@@ -322,10 +390,11 @@ class Api2Db:
         client.ExecuteSQLEx(updateSql, countMap)
         return self._get_movie_by_id(client, movieId)
 
-    # 신규 리뷰 등록 및 자동 감성 분석
+    # 신규 리뷰 등록 및 자동 감성 분석 (작성자 ID 포함)
     def createReview(self, req_param):
         req_map = self._to_map(req_param)
         movieId = QS.Obj2Int(req_map.get("movieId"))
+        userId = str(req_map.get("userId") or "").strip()
         author = self._to_sql_text(req_map.get("authorName"))
         content = self._to_sql_text(req_map.get("content"))
         if not author or not content: raise ValueError("작성자와 내용은 필수입니다.")
@@ -335,8 +404,8 @@ class Api2Db:
         label, score = self._analyze_review_with_model(str(req_map.get("content")).strip())
         
         insertSql = (
-            "INSERT INTO REVIEWS (movieId, authorName, content, sentimentLabel, sentimentScore, createdAt) "
-            f"VALUES ({movieId}, '{author}', '{content}', '{label}', {score}, datetime('now', 'localtime'))"
+            "INSERT INTO REVIEWS (movieId, authorName, content, sentimentLabel, sentimentScore, createdAt, addedBy) "
+            f"VALUES ({movieId}, '{author}', '{content}', '{label}', {score}, datetime('now', 'localtime'), '{self._to_sql_text(userId)}')"
         )
         client.ExecuteSQL(insertSql)
         created = client.SelectSQL(f"SELECT * FROM REVIEWS WHERE movieId={movieId} ORDER BY reviewId DESC LIMIT 1")
@@ -393,11 +462,21 @@ class Api2Db:
         result = client.SelectSQL(sql)
         return result[0]["count"] if result else 0
 
-    # 리뷰 단건 삭제
+    # 리뷰 단건 삭제 (소유권 확인 포함)
     def deleteReview(self, req_param):
         req_map = self._to_map(req_param)
         reviewId = QS.Obj2Int(req_map.get("reviewId"))
+        userId = str(req_map.get("userId") or "").strip()
+        if reviewId <= 0: raise ValueError("reviewId는 필수입니다.")
+        
         client = selectDb()
+        # 소유권 확인 (11번 요구사항: 본인 또는 관리자만)
+        checkRow = client.SelectSQL(f"SELECT addedBy FROM REVIEWS WHERE reviewId = {reviewId} LIMIT 1")
+        if checkRow:
+            db_addedBy = str(checkRow[0].get("addedBy") or "").strip()
+            if db_addedBy and db_addedBy != userId and userId != "admin01":
+                raise ValueError("자신이 작성한 리뷰만 삭제할 수 있습니다.")
+
         countMap = {}
         client.ExecuteSQLEx(f"DELETE FROM REVIEWS WHERE reviewId = {reviewId}", countMap)
         return int(countMap.get("executeCount", 0)) > 0

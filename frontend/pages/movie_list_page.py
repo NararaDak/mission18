@@ -122,8 +122,9 @@ def _showCreateMovieDialog(api: CallApi) -> None:
 		rlsDate = st.date_input("개봉일", value=date.today(), format="YYYY-MM-DD")
 		director, actor, genre, poster = st.text_input("감독"), st.text_input("배우"), st.text_input("장르"), st.text_input("포스터 URL")
 		if st.form_submit_button("영화 추가 저장", use_container_width=True):
+			userId = st.session_state.get("user_id", "")
 			with LoadingPopup("영화 추가 중..."):
-				res = api.createMovie(title.strip(), rlsDate.isoformat(), director=director.strip(), actor=actor.strip(), genre=genre.strip(), posterUrl=poster.strip())
+				res = api.createMovie(title.strip(), rlsDate.isoformat(), director=director.strip(), actor=actor.strip(), genre=genre.strip(), posterUrl=poster.strip(), userId=userId)
 			if res.get("ok"):
 				_refreshTotalCount(api)
 				_setActionMessage(f"추가 완료: {title.strip()}")
@@ -140,8 +141,9 @@ def _showEditMovieDialog(api: CallApi, row: dict[str, object]) -> None:
 		rlsDate = st.date_input("개봉일", value=_parseReleaseDate(row.get("repRlsDate")), format="YYYY-MM-DD")
 		director, actor, genre, poster = st.text_input("감독", value=str(row.get("directorNm", ""))), st.text_input("배우", value=str(row.get("actorNm", ""))), st.text_input("장르", value=str(row.get("genre", ""))), st.text_input("포스터 URL", value=str(row.get("posterUrl", "")))
 		if st.form_submit_button("영화 수정 저장", use_container_width=True):
+			userId = st.session_state.get("user_id", "")
 			with LoadingPopup("영화 수정 중..."):
-				res = api.updateMovie(mid, title.strip(), rlsDate.isoformat(), director.strip(), actor.strip(), genre.strip(), poster.strip())
+				res = api.updateMovie(mid, title.strip(), rlsDate.isoformat(), director.strip(), actor.strip(), genre.strip(), poster.strip(), userId=userId)
 			if res.get("ok"):
 				st.session_state.pop("movieListCacheKey", None)
 				_closeDialog()
@@ -154,11 +156,13 @@ def _showCreateReviewDialog(api: CallApi, row: dict[str, object]) -> None:
 	mid, title = int(row.get("movieId", 0)), str(row.get("title", ""))
 	st.caption(f"대상 영화: {title}")
 	with st.form(f"reviewCreateDialogForm_{mid}"):
-		author = st.text_input("작성자")
+		userName = st.session_state.get("user_name", "")
+		st.write(f"**작성자:** {userName}")
 		content = st.text_area("리뷰 내용", height=160)
 		if st.form_submit_button("리뷰 등록", use_container_width=True):
+			userId = st.session_state.get("user_id", "")
 			with LoadingPopup("리뷰 등록 중..."):
-				res = api.createReview(mid, author.strip(), content.strip())
+				res = api.createReview(mid, userName, content.strip(), userId=userId)
 			if res.get("ok"):
 				st.session_state.pop("movieReviewListCacheKey", None)
 				_setSelectedMovie(row)
@@ -166,6 +170,28 @@ def _showCreateReviewDialog(api: CallApi, row: dict[str, object]) -> None:
 				_closeDialog()
 				st.rerun()
 			else: st.error(res.get("error", "등록 실패"))
+
+# 영화 삭제 확인 다이얼로그
+@st.dialog("영화 삭제", width="small")
+def _showDeleteMovieDialog(api: CallApi, mid: int, title: str) -> None:
+	st.warning(f"'{title}' 영화를 정말 삭제하시겠습니까?")
+	st.info("연관된 리뷰 데이터도 모두 삭제됩니다.")
+	c1, c2 = st.columns(2)
+	userId = st.session_state.get("user_id", "")
+	if c1.button("확인", key=f"delOk_{mid}", use_container_width=True):
+		with LoadingPopup("삭제 중..."):
+			res = api.deleteMovie(mid, userId=userId)
+		if res.get("ok"):
+			_refreshTotalCount(api)
+			st.session_state.pop("selectedMovieRow", None)
+			_setActionMessage(f"삭제 완료: {title}")
+			_closeDialog()
+			st.rerun()
+		else:
+			st.error(res.get("error", "삭제 실패"))
+	if c2.button("취소", key=f"delNo_{mid}", use_container_width=True):
+		_closeDialog()
+		st.rerun()
 
 # 영화 목록 테이블 렌더링
 def _renderMovieTable(api: CallApi, rows: list[dict[str, object]], cols: list[str], titleMap: dict[str, str]) -> None:
@@ -188,31 +214,20 @@ def _renderMovieTable(api: CallApi, rows: list[dict[str, object]], cols: list[st
 			else: cell.write(_formatReleaseDate(val) if c in ("repRlsDate", "releaseDate") else str(val or ""))
 
 		with line[-1]:
-			with st.popover("⋮", use_container_width=True):
-				if st.button("수정", key=f"movieEdit_{i}", use_container_width=True):
-					_setSelectedMovie(row)
-					_openDialog("edit", row)
-					st.rerun()
-				if st.button("삭제", key=f"movieDelete_{rid}", use_container_width=True):
-					st.session_state["delMid"], st.session_state["delTitle"] = rid, str(row.get("title", ""))
-					st.rerun()
-				
-				# 삭제 확인 로직
-				if st.session_state.get("delMid") == rid:
-					st.warning("삭제?")
-					c1, c2 = st.columns(2)
-					if c1.button("확인", key=f"delOk_{rid}"):
-						with LoadingPopup("삭제 중..."): res = api.deleteMovie(rid)
-						if res.get("ok"):
-							_refreshTotalCount(api)
-							st.session_state.pop("selectedMovieRow", None)
-							st.session_state.pop("delMid", None)
-							_setActionMessage("삭제 완료")
-							st.rerun()
-						else: st.error("삭제 실패")
-					if c2.button("취소", key=f"delNo_{rid}"):
-						st.session_state.pop("delMid", None)
+			addedBy = str(row.get("addedBy") or "").strip()
+			userId = st.session_state.get("user_id", "")
+			# 본인이 추가한 영화인 경우에만 수정/삭제 메뉴 노출 (11번 요구사항: 본인 또는 관리자만)
+			if addedBy == userId or st.session_state.get("user_name") == "관리자":
+				with st.popover("⋮", use_container_width=True):
+					if st.button("수정", key=f"movieEdit_{i}", use_container_width=True):
+						_setSelectedMovie(row)
+						_openDialog("edit", row)
 						st.rerun()
+					if st.button("삭제", key=f"movieDelete_{rid}", use_container_width=True):
+						_openDialog("delete", row)
+						st.rerun()
+			else:
+				st.write("")
 		st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
 # 우측 상세 정보 및 리뷰 패널 렌더링
@@ -270,18 +285,23 @@ def _renderReviewPanel(api: CallApi) -> None:
 				st.markdown(f"**{r.get('authorName', '')}**")
 				st.caption(f"{r.get('sentimentLabel', '')} / {r.get('sentimentScore', '')} / {r.get('createdAt', '')}")
 				st.write(r.get("content", ""))
-				c1, c2, _ = st.columns([1, 1, 8])
-				if c1.button("수정", key=f"ml_revEdit_{rvid}_{i}"):
-					st.session_state["ml_editRid"], st.session_state["ml_editTxt"], st.session_state["ml_editAuth"] = rvid, str(r.get("content", "")), str(r.get("authorName", ""))
-				if c2.button("삭제", key=f"ml_revDel_{rvid}_{i}"): st.session_state["ml_revDelRid"] = rvid
+				rOwner = str(r.get("addedBy") or "").strip()
+				userId = st.session_state.get("user_id", "")
+				# 리뷰도 소유자 또는 관리자만 수정/삭제 버튼 노출 (11번 요구사항)
+				if rOwner == userId or st.session_state.get("user_name") == "관리자":
+					c1, c2, _ = st.columns([1, 1, 8])
+					if c1.button("수정", key=f"ml_revEdit_{rvid}_{i}"):
+						st.session_state["ml_editRid"], st.session_state["ml_editTxt"], st.session_state["ml_editAuth"] = rvid, str(r.get("content", "")), str(r.get("authorName", ""))
+					if c2.button("삭제", key=f"ml_revDel_{rvid}_{i}"): st.session_state["ml_revDelRid"] = rvid
 				
 				# 리뷰 수정 폼
 				if st.session_state.get("ml_editRid") == rvid:
 					with st.form(f"ml_revEditForm_{rvid}_{i}"):
+						userName = st.session_state.get("user_name", "")
+						st.write(f"**작성자:** {userName}")
 						txt = st.text_area("내용", value=st.session_state.get("ml_editTxt", ""), height=120)
-						auth = st.text_input("작성자", value=st.session_state.get("ml_editAuth", ""))
 						if st.form_submit_button("수정 완료"):
-							with LoadingPopup("수정 중..."): editRes = api.editReview(rvid, auth, txt)
+							with LoadingPopup("수정 중..."): editRes = api.editReview(rvid, userName, txt, userId=userId)
 							if editRes.get("ok"):
 								st.session_state.pop("movieReviewListCacheKey", None)
 								st.session_state.pop("ml_editRid", None)
@@ -296,7 +316,8 @@ def _renderReviewPanel(api: CallApi) -> None:
 					st.warning("삭제?")
 					dc1, dc2 = st.columns(2)
 					if dc1.button("삭제 확정", key=f"ml_revDelOk_{rvid}_{i}"):
-						with LoadingPopup("삭제 중..."): delRes = api.deleteReview(rvid)
+						userId = st.session_state.get("user_id", "")
+						with LoadingPopup("삭제 중..."): delRes = api.deleteReview(rvid, userId=userId)
 						if delRes.get("ok"):
 							st.session_state.pop("movieReviewListCacheKey", None)
 							st.session_state.pop("ml_revDelRid", None)
@@ -323,15 +344,19 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 
 # --- 메인 렌더링 시작 ---
 
-st.subheader("영화 목록(ver1.3)")
+st.subheader("영화 목록(ver1.4)")
 _ensureSearchDefaults()
 
-# 검색 폼 설계 (개봉일 체크박스와 날짜 입력을 폼 밖으로 분리)
+# 검색 필터 UI (개봉일 체크박스와 날짜 입력을 폼 밖으로 분리하여 즉각적인 UI 반응 유도)
+# 1. 상단 라벨 및 체크박스
 tCols = st.columns([2, 2, 2, 6])
-tCols[0].markdown("**영화제목**"); tCols[1].markdown("**감독**"); tCols[2].markdown("**배우**")
+tCols[0].markdown("**영화제목**")
+tCols[1].markdown("**감독**")
+tCols[2].markdown("**배우**")
 with tCols[3]:
 	st.checkbox("개봉일", key="movieSearchUseReleaseRange")
 
+# 2. 입력 위젯 및 날짜 검색
 iCols = st.columns([2, 2, 2, 6])
 iCols[0].text_input("제목", key="movieSearchTitle", label_visibility="collapsed")
 iCols[1].text_input("감독", key="movieSearchDirector", label_visibility="collapsed")
@@ -346,19 +371,20 @@ with iCols[3]:
 _prev_use_range = st.session_state.get("_ml_prevUseRange")
 _curr_use_range = st.session_state.get("movieSearchUseReleaseRange", False)
 if _prev_use_range is not None and _prev_use_range != _curr_use_range:
-    _closeDialog()
+	_closeDialog()
 st.session_state["_ml_prevUseRange"] = _curr_use_range
 
-# 검색 버튼과 영화 추가 버튼만 폼으로 감싸서 submit 시 동작
+# 검색 버튼과 영화 추가 버튼만 폼으로 감싸서 한꺼번에 처리
 with st.form("movieSearchForm"):
 	btnCols = st.columns([1, 1, 8])
-	srchClicked, addClicked = btnCols[0].form_submit_button("조회", use_container_width=True), btnCols[1].form_submit_button("영화 추가", use_container_width=True)
+	srchClicked = btnCols[0].form_submit_button("조회", use_container_width=True)
+	addClicked = btnCols[1].form_submit_button("영화 추가", use_container_width=True)
 
 if srchClicked:
-    _closeDialog()  # 검색 시 기존 다이얼로그 상태 초기화
+	_closeDialog()  # 검색 시 기존 다이얼로그 상태 초기화
 if addClicked:
-    _openDialog("create")
-    st.rerun()
+	_openDialog("create")
+	st.rerun()
 
 # 알림 메시지 노출
 msg = st.session_state.get("ml_movieListActionMessage", "")
@@ -372,6 +398,7 @@ dtype, drow = st.session_state.get("movieDialogType"), st.session_state.get("mov
 if dtype == "create": _showCreateMovieDialog(api)
 elif dtype == "edit" and drow: _showEditMovieDialog(api, drow)
 elif dtype == "review" and drow: _showCreateReviewDialog(api, drow)
+elif dtype == "delete" and drow: _showDeleteMovieDialog(api, int(drow.get("movieId", 0)), str(drow.get("title", "")))
 
 # 조회 시작 시 페이지 초기화 및 건수 갱신
 if srchClicked or "ml_movieListTotalCount" not in st.session_state:

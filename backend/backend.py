@@ -170,6 +170,30 @@ def Update_Review(req_param: str | dict[str, Any] = Body(...)) -> dict[str, Any]
         out_map.update(Get_Error_Response(str(ex)))
     return out_map
 
+# 로그인 API
+@router.post("/login")
+def Get_Login(req_param: str | dict[str, Any] = Body(...)) -> dict[str, Any]:
+    out_map: dict[str, Any] = {}
+    try:
+        api2db = Api2Db()
+        result = api2db.login(req_param)
+        out_map.update(result)
+    except Exception as ex:
+        out_map.update(Get_Error_Response(str(ex)))
+    return out_map
+
+# 회원가입 API
+@router.post("/createuser")
+def Create_User(req_param: str | dict[str, Any] = Body(...)) -> dict[str, Any]:
+    out_map: dict[str, Any] = {}
+    try:
+        api2db = Api2Db()
+        result = api2db.createUser(req_param)
+        out_map.update(result)
+    except Exception as ex:
+        out_map.update(Get_Error_Response(str(ex)))
+    return out_map
+
 # 라우터 등록 및 서버 실행 설정
 app.include_router(router)
 
