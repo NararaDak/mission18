@@ -12,7 +12,7 @@ if "login_error" not in st.session_state:
 user_id = st.text_input("아이디", max_chars=20, help="아이디를 입력하세요.")
 user_pw = st.text_input("비밀번호", type="password")
 
-login_btn = st.button("로그인")
+login_btn = st.button("로그인(ver1.0)")
 
 if login_btn:
     if not user_id:
