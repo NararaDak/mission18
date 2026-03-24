@@ -21,8 +21,8 @@ def show_login():
     # 7번 요구사항: 로그인 화면 크기 조정 및 중앙 배치
     _, centerCol, _ = st.columns([1, 2, 1])
     with centerCol:
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-        st.markdown('<div class="login-title">로그인</div>', unsafe_allow_html=True)
+    #    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">로그인(ver1.0)</div>', unsafe_allow_html=True)
 
         if "login_error" not in st.session_state:
             st.session_state["login_error"] = ""
