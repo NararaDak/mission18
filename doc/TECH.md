@@ -1,7 +1,168 @@
 ---
+
+## 8. 백엔드 API 명세 (API.md 통합)
+
+이 섹션은 Mission18 서버의 공식 API 명세를 포함합니다. 모든 API는 POST 방식이며, 응답은 통일된 JSON 포맷(`datalist`, `datacount`, `code`, `ok`)으로 반환됩니다.
+
+### 8.1 기본 접속 정보
+| 환경 | 주소 | 설명 |
+|---|---|---|
+| Base URL (로컬) | `http://127.0.0.1:8019` | FastAPI 백엔드 서버 기본 URL |
+| Swagger UI | `http://127.0.0.1:8019/docs` | 내장 자동화 API 테스트 사이트 |
+
+### 8.2 공통 응답 포맷
+```json
+{
+  "code": "OK",              // 정상이면 "OK", 에러 시 "Error"
+  "ok": true,                // 내부 요청 성공 여부 (true/false)
+  "message": "",             // 에러 발생 시의 원장 메시지
+  "datalist": [...],         // 데이터 배열 (단건 응답의 경우는 딕셔너리가 들어갈 수도 있음)
+  "datacount": 10            // `datalist`에 들어있는 데이터의 개수 또는 총 집계 카운트 결과
+}
+```
+
+### 8.3 REST API 엔드포인트 명세
+
+#### 1. 영화 목록 조회
+- **URL**: `POST /accessdata/getmovies`
+- **Request Body (JSON)**:
+```json
+{
+    "COUNT": "10",
+    "START": "0",
+    "TITLE": "영화 제목",
+    "DIRECTOR": "감독 이름",
+    "ACTOR": "배우 이름",
+    "RELEASE_START": "YYYY-MM-DD",
+    "RELEASE_END": "YYYY-MM-DD"
+}
+```
+- **Response**: `datalist` 안에 영화 메타 데이터 배열 리턴
+
+#### 2. 영화 건수만 조회 (페이징 총량용)
+- **URL**: `POST /accessdata/getmoviescount`
+- **Request Body (JSON)**: getmovies와 동일, 단 COUNT, START 불필요
+- **Response**: `datacount` 값에 총 영화 데이터 개수 리턴
+
+#### 3. 영화 등록
+- **URL**: `POST /accessdata/createmovie`
+- **Request Body (JSON)**:
+```json
+{
+    "docid": "",
+    "title": "영화 제목",
+    "releaseDate": "YYYY-MM-DD",
+    "directorNm": "감독",
+    "genre": "장르",
+    "posterUrl": "포스터링크",
+    "actorNm": "배우들"
+}
+```
+
+#### 4. 영화 정보 수정
+- **URL**: `POST /accessdata/updatemovie`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1,
+    "title": "수정할 영화 제목",
+    "releaseDate": "YYYY-MM-DD",
+    "directorNm": "새 감독",
+    "actorNm": "새 배우",
+    "genre": "새 장르",
+    "posterUrl": "새 포스터"
+}
+```
+
+#### 5. 영화 삭제 (종속된 리뷰 모두 포함)
+- **URL**: `POST /accessdata/deletemovie`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1
+}
+```
+
+#### 6. 특정 영화에 종속된 감성 리뷰 리스트 확인
+- **URL**: `POST /accessdata/getreviews`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1
+}
+```
+- **Response**: `datalist` 내부에 `sentimentLabel`, `sentimentScore`, `authorName`, `content` 등이 포함된 배열 반환
+
+#### 7. 리뷰 등록 (AI 평가 연동)
+- **URL**: `POST /accessdata/createreview`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1,
+    "authorName": "작성자",
+    "content": "이 영화 정말 재미있어요!"
+}
+```
+- **특이사항**: 서버에서 content 분석 후 DB에 AI 감성 결과 자동 주입
+
+#### 8. 리뷰 수정 (AI 재평가)
+- **URL**: `POST /accessdata/updatereview`
+- **Request Body (JSON)**:
+```json
+{
+    "reviewId": 12,
+    "authorName": "작성자 닉수정",
+    "content": "생각해보니 다시 보니 별로네요"
+}
+```
+- **특이사항**: 내용이 재분석되어 감성 점수/라벨이 즉시 갱신됨
+
+#### 9. 리뷰 삭제
+- **URL**: `POST /accessdata/deletereview`
+- **Request Body (JSON)**:
+```json
+{
+    "reviewId": 12
+}
+```
+
+#### 10. 모든 리뷰 통합 검색 및 필터링
+- **URL**: `POST /accessdata/getallreviews`
+- **Request Body (JSON)**:
+```json
+{
+    "COUNT": "10",
+    "START": "0",
+    "MOVIE_TITLE": "매트릭스",
+    "AUTHOR_NAME": "홍길동",
+    "CONTENT": "재미",
+    "SENTIMENT_LABEL": "negative",
+    "SENTIMENT_SCORE": "1",
+    "CREATED_START": "YYYY-MM-DD",
+    "CREATED_END": "YYYY-MM-DD"
+}
+```
+
+#### 11. 통합 리뷰 건수 집계 (페이징용)
+- **URL**: `POST /accessdata/getallreviewscount`
+- **Request Body (JSON)**: getallreviews와 동일, 단 COUNT/START 무시
+---
+
 # Mission18 기술문서 (TECH.md)
 
 이 문서는 Mission18 프로젝트의 전체 소스 코드 구성, 상세 기술 명세 및 시스템 흐름을 설명합니다. 본 문서를 통해 프로젝트의 모든 구성 요소와 데이터 흐름을 완벽하게 파악할 수 있습니다.
+
+## 목차
+1. 프로젝트 개요
+2. 전체 시스템 구조 및 파이프라인 시각화
+3. 전체 소스 코드 맵 (Full Source Map)
+4. 핵심 시스템 흐름 및 기능 상세
+5. 데이터베이스 구조 (Summary)
+6. 외부 API 연동 기법 및 명세 (KMDB)
+7. 확장 가이드
+8. 백엔드 API 명세
+
+---
 
 ## 1. 프로젝트 개요
 - **목적**: 영화 및 리뷰 데이터를 KMDB API를 통해 수집하고, AI 감성 분석 모델을 활용하여 데이터 기반의 영화 정보 시스템을 구축함
@@ -165,16 +326,24 @@ sequenceDiagram
 | - `huggingface_model.py` | HF 연동 구현 | Transformers 라이브러리를 이용한 로컬 기반 감성 분석 |
 | - `ollama_model.py` | Ollama 연동 구현 | Llama3 등 LLM 서버 API와의 통신을 통한 감성 분석 |
 
+
 ### 📁 3. 프론트엔드 (`frontend/`) - 사용자 인터페이스
 | 파일명/디렉토리 | 주요 역할 | 상세 기능 |
 |---|---|---|
 | `frontend.py` | Streamlit 게이트웨이 | 메인 화면 구성 및 탭 기반 페이지 전환(runpy 활용) 제어 |
 | `call_api.py` | API 클라이언트 | 백엔드 `/accessdata` 엔드포인트와 통신 및 데이터 정규화 로직 |
-| **`pages/`** | 개별 화면 로직 | Streamlit 단독 페이지들 |
+| `login.py` | 로그인 UI/로직 컴포넌트 | show_login() 함수로 로그인 화면 UI, 스타일, 인증 로직을 통합 관리. 모든 로그인 관련 페이지에서 import 하여 사용 |
+| **`pages/`** | 개별 화면 로직 | Streamlit 단독 페이지들 (각 페이지는 필요한 경우 login.py의 show_login()을 호출하여 로그인 UI를 재사용) |
+| - `login_page.py` | 로그인 페이지 | 별도 UI/로직 없이 from login import show_login 후 show_login()만 호출하여 중복 제거 및 유지보수성 향상 |
 | - `movie_list_page.py` | 영화 목록/검색/상세 | 조건별 필터링, 평점 통계 조회 및 영화 삭제 기능 |
 | - `movie_create_page.py` | 영화 추가 화면 | 사용자가 직접 새로운 영화 정보를 입력하고 등록하는 UI |
 | - `review_list_page.py` | 리뷰 대시보드 | 프로젝트 내 모든 리뷰 목록 및 감성 분석 분포 확인 |
 | - `review_create_page.py` | 리뷰 등록 화면 | 리뷰 작성 시 즉시 감성 분석 모델을 호출하여 결과 확인 가능 |
+
+#### [2026-03-24] 로그인 화면 구조 리팩토링 내역
+- 기존에는 frontend/login.py와 pages/login_page.py에 로그인 UI/로직이 중복되어 관리됨
+- 중복 제거 및 유지보수성 향상을 위해 login.py에 show_login() 함수로 통합, pages/login_page.py에서는 show_login()만 호출하도록 구조 개선
+- 이로써 로그인 화면의 UI/로직/스타일을 한 곳에서만 관리할 수 있게 되어, 코드 가독성 및 이식성이 크게 향상됨
 
 ---
 
@@ -214,22 +383,94 @@ flowchart LR
 
 ## 5. 데이터베이스 구조 (Summary)
 
+
 ### MOVIES (영화 데이터)
-| 필드 | 설명 |
-|---|---|
-| `movieId` | 내부 PK (Integer) |
-| `docid` | 외부 문서 ID |
-| `title` | 영화 제목 (정제됨) |
-| `repRlsDate` | 대표 개봉일 |
-| `posterUrl` | 포스터 이미지 링크 |
+| 필드명 | 타입 | 설명 |
+|---|---|---|
+| movieId | INTEGER (PK, AUTOINCREMENT) | 내부 PK, 자동 증가 |
+| collection | TEXT | 수집 컬렉션명 |
+| pageNo | INTEGER | 수집 페이지 번호 |
+| numOfRows | INTEGER | 페이지당 행 수 |
+| totalCount | INTEGER | 전체 데이터 수 |
+| rowValue | INTEGER | 행 값 |
+| docid | TEXT (UNIQUE) | 외부 문서 ID |
+| kmdbMovieId | TEXT | KMDB 영화 ID |
+| movieSeq | TEXT | KMDB 영화 시퀀스 |
+| title | TEXT (NOT NULL) | 영화 제목 |
+| titleEng | TEXT | 영어 제목 |
+| titleOrg | TEXT | 원제 |
+| titleEtc | TEXT | 기타 제목 |
+| plot | TEXT | 줄거리 (CLOB/텍스트) |
+| directorNm | TEXT | 감독명 |
+| directorEnNm | TEXT | 감독 영문명 |
+| directorId | TEXT | 감독 ID |
+| actorNm | TEXT | 배우명(들) |
+| actorEnNm | TEXT | 배우 영문명 |
+| actorId | TEXT | 배우 ID |
+| nation | TEXT | 제작 국가 |
+| company | TEXT | 제작사 |
+| prodYear | TEXT | 제작년도 |
+| runtime | TEXT | 상영시간 |
+| rating | TEXT | 등급 |
+| genre | TEXT | 장르 |
+| kmdbUrl | TEXT | KMDB 상세 URL |
+| movieType | TEXT | 영화 유형 |
+| movieUse | TEXT | 영화 용도 |
+| episodes | TEXT | 에피소드 |
+| ratedYn | TEXT | 등급여부 |
+| repRatDate | TEXT | 대표 등급일 |
+| repRlsDate | TEXT | 대표 개봉일 |
+| ratingMain | TEXT | 주요 등급 |
+| ratingDate | TEXT | 등급일 |
+| ratingNo | TEXT | 등급번호 |
+| ratingGrade | TEXT | 등급 등급 |
+| releaseDate | TEXT | 개봉일 |
+| keywords | TEXT | 키워드 |
+| posterUrl | TEXT | 포스터 이미지 링크 |
+| stillUrl | TEXT | 스틸컷 이미지 링크 |
+| staffNm | TEXT | 스태프명 |
+| staffRoleGroup | TEXT | 스태프 역할 그룹 |
+| staffRole | TEXT | 스태프 역할 |
+| staffEtc | TEXT | 스태프 기타 |
+| staffId | TEXT | 스태프 ID |
+| vodClass | TEXT | VOD 분류 |
+| vodUrl | TEXT | VOD URL |
+| openThtr | TEXT | 개봉 극장 |
+| screenArea | TEXT | 상영 지역 |
+| screenCnt | TEXT | 상영관 수 |
+| salesAcc | TEXT | 누적 매출 |
+| audiAcc | TEXT | 누적 관객 |
+| statSouce | TEXT | 통계 출처 |
+| statDate | TEXT | 통계 일자 |
+| themeSong | TEXT | 테마곡 |
+| soundtrack | TEXT | 사운드트랙 |
+| fLocation | TEXT | 촬영지 |
+| awards1 | TEXT | 수상내역1 |
+| awards2 | TEXT | 수상내역2 |
+| regDate | TEXT | 등록일 |
+| modDate | TEXT | 수정일 |
+| codeNm | TEXT | 코드명 |
+| codeNo | TEXT | 코드번호 |
+| commCodes | TEXT | 커뮤니티 코드 |
+| createdAt | DATETIME | 생성일 (기본값: 현재) |
 
 ### REVIEWS (리뷰 데이터)
-| 필드 | 설명 |
-|---|---|
-| `reviewId` | 리뷰 PK |
-| `movieId` | 대상 영화 ID (FK) |
-| `sentimentLabel` | 긍정/중립/부정 판정 |
-| `sentimentScore` | 수치형 분석 결과 (1.0~5.0) |
+| 필드명 | 타입 | 설명 |
+|---|---|---|
+| reviewId | INTEGER (PK, AUTOINCREMENT) | 리뷰 PK |
+| movieId | INTEGER (FK) | 대상 영화 ID (movies.movieId 참조) |
+| authorName | TEXT | 리뷰 작성자 |
+| content | TEXT | 리뷰 본문 |
+| sentimentLabel | TEXT | 감성 분석 결과 (긍정/중립/부정) |
+| sentimentScore | REAL | 감성 점수 (1.0~5.0 등) |
+| createdAt | DATETIME | 생성일 (기본값: 현재) |
+
+### MOVIE_USER (사용자 관리)
+| 필드명 | 타입 | 설명 |
+|---|---|---|
+| user_id | TEXT (PK) | 사용자 ID (4~32자, UNIQUE) |
+| user_name | TEXT | 사용자 이름 |
+| user_pw | TEXT | 비밀번호 (6~64자) |
 
 ---
 
@@ -265,6 +506,156 @@ API에서 반환되는 JSON 데이터 필드(`movie`)의 주요 항목이 로컬
 
 ---
 
+
 ## 7. 확장 가이드
 - **새로운 수집원 추가**: `backend/db/` 내에 새로운 수집 모듈을 작성하고 `m18_collect.py`와 같은 방식으로 `SQLiteDB` 클래스에 연결하십시오.
 - **분석 모델 교체**: `models/` 폴더에 추상 클래스를 상속받는 새 모델 파일을 만들고 `api2db.py`의 팩토리 로직에 등록하십시오.
+
+---
+
+## 8. 백엔드 API 명세 (API.md 통합)
+
+이 섹션은 Mission18 서버의 공식 API 명세를 포함합니다. 모든 API는 POST 방식이며, 응답은 통일된 JSON 포맷(`datalist`, `datacount`, `code`, `ok`)으로 반환됩니다.
+
+### 8.1 기본 접속 정보
+| 환경 | 주소 | 설명 |
+|---|---|---|
+| Base URL (로컬) | `http://127.0.0.1:8019` | FastAPI 백엔드 서버 기본 URL |
+| Swagger UI | `http://127.0.0.1:8019/docs` | 내장 자동화 API 테스트 사이트 |
+
+### 8.2 공통 응답 포맷
+```json
+{
+  "code": "OK",              // 정상이면 "OK", 에러 시 "Error"
+  "ok": true,                // 내부 요청 성공 여부 (true/false)
+  "message": "",             // 에러 발생 시의 원장 메시지
+  "datalist": [...],         // 데이터 배열 (단건 응답의 경우는 딕셔너리가 들어갈 수도 있음)
+  "datacount": 10            // `datalist`에 들어있는 데이터의 개수 또는 총 집계 카운트 결과
+}
+```
+
+### 8.3 REST API 엔드포인트 명세
+
+#### 1. 영화 목록 조회
+- **URL**: `POST /accessdata/getmovies`
+- **Request Body (JSON)**:
+```json
+{
+    "COUNT": "10",
+    "START": "0",
+    "TITLE": "영화 제목",
+    "DIRECTOR": "감독 이름",
+    "ACTOR": "배우 이름",
+    "RELEASE_START": "YYYY-MM-DD",
+    "RELEASE_END": "YYYY-MM-DD"
+}
+```
+- **Response**: `datalist` 안에 영화 메타 데이터 배열 리턴
+
+#### 2. 영화 건수만 조회 (페이징 총량용)
+- **URL**: `POST /accessdata/getmoviescount`
+- **Request Body (JSON)**: getmovies와 동일, 단 COUNT, START 불필요
+- **Response**: `datacount` 값에 총 영화 데이터 개수 리턴
+
+#### 3. 영화 등록
+- **URL**: `POST /accessdata/createmovie`
+- **Request Body (JSON)**:
+```json
+{
+    "docid": "",
+    "title": "영화 제목",
+    "releaseDate": "YYYY-MM-DD",
+    "directorNm": "감독",
+    "genre": "장르",
+    "posterUrl": "포스터링크",
+    "actorNm": "배우들"
+}
+```
+
+#### 4. 영화 정보 수정
+- **URL**: `POST /accessdata/updatemovie`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1,
+    "title": "수정할 영화 제목",
+    "releaseDate": "YYYY-MM-DD",
+    "directorNm": "새 감독",
+    "actorNm": "새 배우",
+    "genre": "새 장르",
+    "posterUrl": "새 포스터"
+}
+```
+
+#### 5. 영화 삭제 (종속된 리뷰 모두 포함)
+- **URL**: `POST /accessdata/deletemovie`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1
+}
+```
+
+#### 6. 특정 영화에 종속된 감성 리뷰 리스트 확인
+- **URL**: `POST /accessdata/getreviews`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1
+}
+```
+- **Response**: `datalist` 내부에 `sentimentLabel`, `sentimentScore`, `authorName`, `content` 등이 포함된 배열 반환
+
+#### 7. 리뷰 등록 (AI 평가 연동)
+- **URL**: `POST /accessdata/createreview`
+- **Request Body (JSON)**:
+```json
+{
+    "movieId": 1,
+    "authorName": "작성자",
+    "content": "이 영화 정말 재미있어요!"
+}
+```
+- **특이사항**: 서버에서 content 분석 후 DB에 AI 감성 결과 자동 주입
+
+#### 8. 리뷰 수정 (AI 재평가)
+- **URL**: `POST /accessdata/updatereview`
+- **Request Body (JSON)**:
+```json
+{
+    "reviewId": 12,
+    "authorName": "작성자 닉수정",
+    "content": "생각해보니 다시 보니 별로네요"
+}
+```
+- **특이사항**: 내용이 재분석되어 감성 점수/라벨이 즉시 갱신됨
+
+#### 9. 리뷰 삭제
+- **URL**: `POST /accessdata/deletereview`
+- **Request Body (JSON)**:
+```json
+{
+    "reviewId": 12
+}
+```
+
+#### 10. 모든 리뷰 통합 검색 및 필터링
+- **URL**: `POST /accessdata/getallreviews`
+- **Request Body (JSON)**:
+```json
+{
+    "COUNT": "10",
+    "START": "0",
+    "MOVIE_TITLE": "매트릭스",
+    "AUTHOR_NAME": "홍길동",
+    "CONTENT": "재미",
+    "SENTIMENT_LABEL": "negative",
+    "SENTIMENT_SCORE": "1",
+    "CREATED_START": "YYYY-MM-DD",
+    "CREATED_END": "YYYY-MM-DD"
+}
+```
+
+#### 11. 통합 리뷰 건수 집계 (페이징용)
+- **URL**: `POST /accessdata/getallreviewscount`
+- **Request Body (JSON)**: getallreviews와 동일, 단 COUNT/START 무시

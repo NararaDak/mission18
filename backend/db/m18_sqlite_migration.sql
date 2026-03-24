@@ -1,6 +1,5 @@
--- Mission18 데이터베이스 스키마 정의 (SQLite용)
 
--- 영화 정보 테이블 (KMDB 수집 데이터 기준)
+-- 영화 정보 테이블 (Oracle 스키마와 최대한 일치)
 CREATE TABLE IF NOT EXISTS movies (
     movieId INTEGER PRIMARY KEY AUTOINCREMENT,
     collection TEXT,
@@ -15,6 +14,7 @@ CREATE TABLE IF NOT EXISTS movies (
     titleEng TEXT,
     titleOrg TEXT,
     titleEtc TEXT,
+    plot TEXT,
     directorNm TEXT,
     directorEnNm TEXT,
     directorId TEXT,
@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS movies (
     nation TEXT,
     company TEXT,
     prodYear TEXT,
-    plot TEXT,
     runtime TEXT,
     rating TEXT,
     genre TEXT,
@@ -74,17 +73,23 @@ CREATE TABLE IF NOT EXISTS movies (
 CREATE INDEX IF NOT EXISTS idx_movies_title ON movies(title);
 CREATE INDEX IF NOT EXISTS idx_movies_releaseDate ON movies(releaseDate);
 
--- 리뷰 관리 테이블
+-- 리뷰 관리 테이블 (Oracle 스키마와 최대한 일치)
 CREATE TABLE IF NOT EXISTS reviews (
     reviewId INTEGER PRIMARY KEY AUTOINCREMENT,
-    movieId INTEGER NOT NULL,  -- movies 테이블의 movieId 참조
+    movieId INTEGER NOT NULL,
     authorName TEXT NOT NULL,
     content TEXT NOT NULL,
     sentimentLabel TEXT,
-    sentimentScore INTEGER,
+    sentimentScore REAL,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (movieId) REFERENCES movies(movieId) ON DELETE CASCADE
 );
 
--- 인덱스 추가 (영화별 리뷰 조회)
 CREATE INDEX IF NOT EXISTS idx_reviews_movieId ON reviews(movieId);
+
+-- 사용자 관리 테이블 (Oracle 스키마와 최대한 일치)
+CREATE TABLE IF NOT EXISTS movie_user (
+    user_id TEXT PRIMARY KEY CHECK (LENGTH(user_id) >= 4 AND LENGTH(user_id) <= 32),
+    user_name TEXT NOT NULL,
+    user_pw TEXT NOT NULL CHECK (LENGTH(user_pw) >= 6 AND LENGTH(user_pw) <= 64)
+);

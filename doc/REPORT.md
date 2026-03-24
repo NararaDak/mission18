@@ -28,7 +28,14 @@
 
 ---
 
+
 ## 3. 주요 기능
+
+- **로그인 및 회원가입**
+  - 별도의 로그인/회원가입 페이지를 제공하며, 사용자 인증 및 세션 관리를 지원합니다.
+  - 로그인 UI는 Streamlit 기반의 커스텀 스타일로 제공되며, 아이디/비밀번호 입력, 오류 메시지, 성공 메시지, 회원가입 버튼 등 UX를 강화하였습니다.
+  - 회원 정보는 백엔드의 movie_user 테이블에 안전하게 저장되며, 인증 성공 시 세션에 사용자 정보가 저장되어 이후 모든 기능에서 활용됩니다.
+  - 로그인/회원가입 로직은 frontend/login.py의 show_login() 함수로 통합 관리되어, 유지보수성과 일관성이 뛰어납니다.
 
 - **영화 관리 (CRUD)**
   - 영화 목록 조회 (페이지네이션, 다중 필터 검색 지원)
@@ -43,26 +50,40 @@
 
 ---
 
+
 ## 3. 시스템 구성
 
-프론트엔드(Streamlit UI)와 백엔드(FastAPI)가 완전하게 분리되어 있으며, 상호간 통신은 오직 HTTP API로만 이뤄집니다.
+### 3-1. 실제 서비스/운영 환경 및 인프라 구조
 
-### 3-1. 아키텍처 다이어그램
+- **Frontend**: GitHub 저장소와 연동되어 streamlit.io(Cloud)에서 서비스됩니다. (CI/CD 또는 수동 배포)
+- **Backend**: Oracle Cloud의 Compute 인스턴스에서 FastAPI 서버가 구동됩니다.
+- **Ollama**: 프라이빗 개인 PC에서 Ollama LLM 서비스가 실행되며, 백엔드에서 네트워크를 통해 API 호출로 연동합니다.
+- **Oracle Database**: Oracle Cloud Database를 사용하여 일부 데이터(또는 확장 시)를 저장/관리합니다.
+- **HuggingFace, SQLite**: 백엔드 서버(Oracle Cloud Compute) 내에서 로컬로 실행 및 관리됩니다. (HuggingFace 모델은 서버 내에서 직접 inference, SQLite는 파일 기반 DB)
+
+프론트엔드와 백엔드는 완전히 분리되어 있으며, 상호간 통신은 오직 HTTP API로만 이뤄집니다.
+
+
+### 3-2. 아키텍처 다이어그램 (텍스트/mermaid)
 
 ```mermaid
 flowchart LR
-    subgraph Frontend [프론트엔드 - Streamlit]
-        A(영화/리뷰 목록 페이지) -->|버튼 액션\n및 폼 입력| B(Popup 스피너 및\nCallApi 모듈)
-    end
+  subgraph Frontend [프론트엔드 - Streamlit]
+    A(영화/리뷰 목록 페이지) -->|버튼 액션\n및 폼 입력| B(Popup 스피너 및\nCallApi 모듈)
+  end
     
-    subgraph Backend [백엔드 - FastAPI]
-        B -->|POST /accessdata/...| C(FastAPI 라우터)
-        C --> D(Api2Db 데이터 제어 컨트롤러)
-        D <-->|SQL| E[(SQLite Database)]
-        D -->|리뷰 텍스트 전달| F[HuggingFace / Ollama\n감성 분석 모델]
-        F -->|라벨 및 스코어 반환| D
-    end
+  subgraph Backend [백엔드 - FastAPI]
+    B -->|POST /accessdata/...| C(FastAPI 라우터)
+    C --> D(Api2Db 데이터 제어 컨트롤러)
+    D <-->|SQL| E[(SQLite Database)]
+    D -->|리뷰 텍스트 전달| F[HuggingFace / Ollama\n감성 분석 모델]
+    F -->|라벨 및 스코어 반환| D
+  end
 ```
+
+### 3-3. 전체 인프라/서비스 아키텍처(이미지)
+
+![Mission18 인프라 아키텍처](./m18_architect.png)
 
 ---
 

@@ -1,4 +1,3 @@
-frontend
 
 1. 로그인 상태 아닐경우에 로그인 화면만 나타난다.(단 이때에 영화 목록/리뷰목록 은 보이지 않는다.
 2. 로그인 화면에서 로그인이나 확인을 눌러야 로그인을 진행 한다.
@@ -17,3 +16,11 @@ frontend
 
 11.영화/리뷰 수정/삭제는 본인만 할수 있도록 할것.
 
+12. API.md를 TECH.md로 합쳐 주세요.
+
+13. REPORT.md를 현재 코드에 맞게 업데이트 해주시고, 아래와 같은 부분을 넣어 주세요.
+* frontend는  github와 연동해서  streamlit.io 를 통해서 서비스 됩니다.
+* backend는 oracle cloud compute에서 수행 됩니다.
+* ollama는 프라이이빗 개인 PC의 서비서를 이용합니다.
+* oracle database는 oracle cloud database를 이용합니다.
+* huggingface나 sqlite는 백엔드의 로컬에서 수행 됩니다.
