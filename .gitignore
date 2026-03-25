@@ -36,7 +36,7 @@ ENV/
 .idea/
 *.swp
 *.swo
-
+.doc/ 
 # OS
 .DS_Store
 Thumbs.db
