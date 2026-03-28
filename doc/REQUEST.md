@@ -24,3 +24,7 @@
 * ollama는 프라이이빗 개인 PC의 서비서를 이용합니다.
 * oracle database는 oracle cloud database를 이용합니다.
 * huggingface나 sqlite는 백엔드의 로컬에서 수행 됩니다.
+
+
+Report.md와 tech.md 를 합쳐서 하나의 m18_report.md로 만들어  주세요.
+(순서는 적절하게 맞춰 주세요)

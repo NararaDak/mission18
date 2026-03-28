@@ -1,4 +1,42 @@
 # 영화 목록 조회 및 상세 정보, 리뷰 관리를 담당하는 페이지 스크립트
+import streamlit as st
+from call_api import CallApi
+from loading_popup import LoadingPopup
+from common.review_dialogs import show_edit_review_dialog, show_delete_review_dialog
+
+# 리뷰 수정/삭제 다이얼로그 노출
+def _showEditReviewDialog(api: CallApi, r: dict, row: dict) -> None:
+    rvid = int(r.get("reviewId", 0))
+    title = str(row.get("title", ""))
+    st.caption(f"대상 영화: {title}")
+    with st.form(f"ml_revEditForm_{rvid}"):
+        userName = st.session_state.get("user_name", "")
+        st.write(f"**작성자:** {userName}")
+        txt = st.text_area("내용", value=str(r.get("content", "")), height=120)
+        c1, c2, c3 = st.columns([6, 1, 1])
+        with c2:
+            if st.form_submit_button("수정 완료"):
+                userId = st.session_state.get("user_id", "")
+                with LoadingPopup("수정 중..."):
+                    editRes = api.editReview(rvid, userName, txt, userId=userId)
+                if editRes.get("ok"):
+                    st.session_state.pop("movieReviewListCacheKey", None)
+                    st.session_state.pop("ml_editRid", None)
+                    st.session_state.pop("ml_editRow", None)
+                    st.session_state.pop("ml_editMovieRow", None)
+                    st.session_state["ml_tab_idx"] = 1
+                    st.rerun()
+                else:
+                    st.error("실패")
+        with c3:
+            if st.form_submit_button("취소"):
+                st.session_state.pop("ml_editRid", None)
+                st.session_state.pop("ml_editRow", None)
+                st.session_state.pop("ml_editMovieRow", None)
+                st.session_state["ml_tab_idx"] = 1
+                st.rerun()
+
+# 영화 목록 조회 및 상세 정보, 리뷰 관리를 담당하는 페이지 스크립트
 import math
 import configparser
 from calendar import monthrange
@@ -168,6 +206,7 @@ def _showCreateReviewDialog(api: CallApi, row: dict[str, object]) -> None:
 				_setSelectedMovie(row)
 				_setActionMessage(f"리뷰 등록 완료: {title}")
 				_closeDialog()
+				st.session_state["ml_tab_val"] = "📋 영화별 리뷰 목록"
 				st.rerun()
 			else: st.error(res.get("error", "등록 실패"))
 
@@ -239,9 +278,11 @@ def _renderReviewPanel(api: CallApi) -> None:
 		return
 
 	mid, title = int(row.get("movieId", 0)), str(row.get("title", ""))
-	t1, t2 = st.tabs(["🎥 상세 정보", "📋 리뷰 목록"])
+	if "ml_tab_val" not in st.session_state:
+		st.session_state["ml_tab_val"] = "🎥 상세 정보"
+	sel_tab = st.radio("상세 정보 보기", ["🎥 상세 정보", "📋 영화별 리뷰 목록"], horizontal=True, label_visibility="collapsed", key="ml_tab_val")
 
-	with t1: # 영화 상세 정보 탭
+	if sel_tab == "🎥 상세 정보": # 영화 상세 정보 탭
 		st.subheader(title)
 		cImg, cTxt = st.columns([1, 1.5])
 		pst = str(row.get("posterUrl", ""))
@@ -256,7 +297,7 @@ def _renderReviewPanel(api: CallApi) -> None:
 			st.markdown("**📝 줄거리:**")
 			st.write(row.get("plot", "내용 없음"))
 
-	with t2: # 리뷰 목록 탭
+	elif sel_tab == "📋 영화별 리뷰 목록": # 리뷰 목록 탭
 		ch, cb = st.columns([3, 1])
 		ch.subheader(f"{title} 리뷰")
 		if cb.button("➕ 리뷰 등록", key=f"revAdd_{mid}", use_container_width=True):
@@ -289,43 +330,63 @@ def _renderReviewPanel(api: CallApi) -> None:
 				userId = st.session_state.get("user_id", "")
 				# 리뷰도 소유자 또는 관리자만 수정/삭제 버튼 노출 (11번 요구사항)
 				if rOwner == userId or st.session_state.get("user_name") == "관리자":
-					c1, c2, _ = st.columns([1, 1, 8])
-					if c1.button("수정", key=f"ml_revEdit_{rvid}_{i}"):
-						st.session_state["ml_editRid"], st.session_state["ml_editTxt"], st.session_state["ml_editAuth"] = rvid, str(r.get("content", "")), str(r.get("authorName", ""))
-					if c2.button("삭제", key=f"ml_revDel_{rvid}_{i}"): st.session_state["ml_revDelRid"] = rvid
-				
-				# 리뷰 수정 폼
-				if st.session_state.get("ml_editRid") == rvid:
-					with st.form(f"ml_revEditForm_{rvid}_{i}"):
-						userName = st.session_state.get("user_name", "")
-						st.write(f"**작성자:** {userName}")
-						txt = st.text_area("내용", value=st.session_state.get("ml_editTxt", ""), height=120)
-						if st.form_submit_button("수정 완료"):
-							with LoadingPopup("수정 중..."): editRes = api.editReview(rvid, userName, txt, userId=userId)
-							if editRes.get("ok"):
-								st.session_state.pop("movieReviewListCacheKey", None)
-								st.session_state.pop("ml_editRid", None)
-								st.rerun()
-							else: st.error("실패")
-						if st.form_submit_button("취소"):
-							st.session_state.pop("ml_editRid", None)
+					with st.popover("⋮"):
+						if st.button("수정", key=f"ml_revEdit_{rvid}_{i}", use_container_width=True):
+							st.session_state["ml_editRid"] = rvid
+							st.session_state["ml_editRow"] = r
+							st.session_state["ml_editMovieRow"] = row
+							st.rerun()
+						if st.button("삭제", key=f"ml_revDel_{rvid}_{i}", use_container_width=True):
+							st.session_state["ml_revDelRid"] = rvid
+							st.session_state["ml_delRow"] = r
+							st.session_state["ml_delMovieRow"] = row
 							st.rerun()
 
-				# 리뷰 삭제 확인
-				if st.session_state.get("ml_revDelRid") == rvid:
-					st.warning("삭제?")
-					dc1, dc2 = st.columns(2)
-					if dc1.button("삭제 확정", key=f"ml_revDelOk_{rvid}_{i}"):
-						userId = st.session_state.get("user_id", "")
-						with LoadingPopup("삭제 중..."): delRes = api.deleteReview(rvid, userId=userId)
-						if delRes.get("ok"):
-							st.session_state.pop("movieReviewListCacheKey", None)
-							st.session_state.pop("ml_revDelRid", None)
-							st.rerun()
-						else: st.error("실패")
-					if dc2.button("취소", key=f"ml_revDelNo_{rvid}_{i}"):
-						st.session_state.pop("ml_revDelRid", None)
-						st.rerun()
+		# 리뷰 수정/삭제 다이얼로그 노출
+		if st.session_state.get("ml_editRid") and st.session_state.get("ml_editRow") and st.session_state.get("ml_editMovieRow"):
+			def _ml_edit_success():
+				st.session_state.pop("movieReviewListCacheKey", None)
+				st.session_state.pop("ml_editRid", None)
+				st.session_state.pop("ml_editRow", None)
+				st.session_state.pop("ml_editMovieRow", None)
+				st.session_state["ml_tab_val"] = "📋 영화별 리뷰 목록"
+				st.rerun()
+			def _ml_edit_cancel():
+				st.session_state.pop("ml_editRid", None)
+				st.session_state.pop("ml_editRow", None)
+				st.session_state.pop("ml_editMovieRow", None)
+				st.session_state["ml_tab_val"] = "📋 영화별 리뷰 목록"
+				st.rerun()
+			show_edit_review_dialog(
+				api,
+				int(st.session_state["ml_editRow"].get("reviewId", 0)),
+				str(st.session_state["ml_editRow"].get("content", "")),
+				str(st.session_state["ml_editRow"].get("authorName", "")),
+				str(st.session_state["ml_editMovieRow"].get("title", "")),
+				on_success=_ml_edit_success,
+				on_cancel=_ml_edit_cancel
+			)
+		if st.session_state.get("ml_revDelRid") and st.session_state.get("ml_delRow") and st.session_state.get("ml_delMovieRow"):
+			def _ml_del_success():
+				st.session_state.pop("movieReviewListCacheKey", None)
+				st.session_state.pop("ml_revDelRid", None)
+				st.session_state.pop("ml_delRow", None)
+				st.session_state.pop("ml_delMovieRow", None)
+				st.session_state["ml_tab_val"] = "📋 영화별 리뷰 목록"
+				st.rerun()
+			def _ml_del_cancel():
+				st.session_state.pop("ml_revDelRid", None)
+				st.session_state.pop("ml_delRow", None)
+				st.session_state.pop("ml_delMovieRow", None)
+				st.session_state["ml_tab_val"] = "📋 영화별 리뷰 목록"
+				st.rerun()
+			show_delete_review_dialog(
+				api,
+				int(st.session_state["ml_delRow"].get("reviewId", 0)),
+				st.session_state["ml_delMovieRow"].get("title", None),
+				on_success=_ml_del_success,
+				on_cancel=_ml_del_cancel
+			)
 
 # 페이지네이션 컨트롤 렌더링
 def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
@@ -344,7 +405,7 @@ def _renderPagination(curr: int, totalP: int, totalC: int) -> None:
 
 # --- 메인 렌더링 시작 ---
 
-st.subheader("영화 목록(ver1.4)")
+st.subheader("영화 목록(ver1.5)")
 _ensureSearchDefaults()
 
 # 검색 필터 UI (개봉일 체크박스와 날짜 입력을 폼 밖으로 분리하여 즉각적인 UI 반응 유도)

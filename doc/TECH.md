@@ -1,153 +1,3 @@
----
-
-## 8. 백엔드 API 명세 (API.md 통합)
-
-이 섹션은 Mission18 서버의 공식 API 명세를 포함합니다. 모든 API는 POST 방식이며, 응답은 통일된 JSON 포맷(`datalist`, `datacount`, `code`, `ok`)으로 반환됩니다.
-
-### 8.1 기본 접속 정보
-| 환경 | 주소 | 설명 |
-|---|---|---|
-| Base URL (로컬) | `http://127.0.0.1:8019` | FastAPI 백엔드 서버 기본 URL |
-| Swagger UI | `http://127.0.0.1:8019/docs` | 내장 자동화 API 테스트 사이트 |
-
-### 8.2 공통 응답 포맷
-```json
-{
-  "code": "OK",              // 정상이면 "OK", 에러 시 "Error"
-  "ok": true,                // 내부 요청 성공 여부 (true/false)
-  "message": "",             // 에러 발생 시의 원장 메시지
-  "datalist": [...],         // 데이터 배열 (단건 응답의 경우는 딕셔너리가 들어갈 수도 있음)
-  "datacount": 10            // `datalist`에 들어있는 데이터의 개수 또는 총 집계 카운트 결과
-}
-```
-
-### 8.3 REST API 엔드포인트 명세
-
-#### 1. 영화 목록 조회
-- **URL**: `POST /accessdata/getmovies`
-- **Request Body (JSON)**:
-```json
-{
-    "COUNT": "10",
-    "START": "0",
-    "TITLE": "영화 제목",
-    "DIRECTOR": "감독 이름",
-    "ACTOR": "배우 이름",
-    "RELEASE_START": "YYYY-MM-DD",
-    "RELEASE_END": "YYYY-MM-DD"
-}
-```
-- **Response**: `datalist` 안에 영화 메타 데이터 배열 리턴
-
-#### 2. 영화 건수만 조회 (페이징 총량용)
-- **URL**: `POST /accessdata/getmoviescount`
-- **Request Body (JSON)**: getmovies와 동일, 단 COUNT, START 불필요
-- **Response**: `datacount` 값에 총 영화 데이터 개수 리턴
-
-#### 3. 영화 등록
-- **URL**: `POST /accessdata/createmovie`
-- **Request Body (JSON)**:
-```json
-{
-    "docid": "",
-    "title": "영화 제목",
-    "releaseDate": "YYYY-MM-DD",
-    "directorNm": "감독",
-    "genre": "장르",
-    "posterUrl": "포스터링크",
-    "actorNm": "배우들"
-}
-```
-
-#### 4. 영화 정보 수정
-- **URL**: `POST /accessdata/updatemovie`
-- **Request Body (JSON)**:
-```json
-{
-    "movieId": 1,
-    "title": "수정할 영화 제목",
-    "releaseDate": "YYYY-MM-DD",
-    "directorNm": "새 감독",
-    "actorNm": "새 배우",
-    "genre": "새 장르",
-    "posterUrl": "새 포스터"
-}
-```
-
-#### 5. 영화 삭제 (종속된 리뷰 모두 포함)
-- **URL**: `POST /accessdata/deletemovie`
-- **Request Body (JSON)**:
-```json
-{
-    "movieId": 1
-}
-```
-
-#### 6. 특정 영화에 종속된 감성 리뷰 리스트 확인
-- **URL**: `POST /accessdata/getreviews`
-- **Request Body (JSON)**:
-```json
-{
-    "movieId": 1
-}
-```
-- **Response**: `datalist` 내부에 `sentimentLabel`, `sentimentScore`, `authorName`, `content` 등이 포함된 배열 반환
-
-#### 7. 리뷰 등록 (AI 평가 연동)
-- **URL**: `POST /accessdata/createreview`
-- **Request Body (JSON)**:
-```json
-{
-    "movieId": 1,
-    "authorName": "작성자",
-    "content": "이 영화 정말 재미있어요!"
-}
-```
-- **특이사항**: 서버에서 content 분석 후 DB에 AI 감성 결과 자동 주입
-
-#### 8. 리뷰 수정 (AI 재평가)
-- **URL**: `POST /accessdata/updatereview`
-- **Request Body (JSON)**:
-```json
-{
-    "reviewId": 12,
-    "authorName": "작성자 닉수정",
-    "content": "생각해보니 다시 보니 별로네요"
-}
-```
-- **특이사항**: 내용이 재분석되어 감성 점수/라벨이 즉시 갱신됨
-
-#### 9. 리뷰 삭제
-- **URL**: `POST /accessdata/deletereview`
-- **Request Body (JSON)**:
-```json
-{
-    "reviewId": 12
-}
-```
-
-#### 10. 모든 리뷰 통합 검색 및 필터링
-- **URL**: `POST /accessdata/getallreviews`
-- **Request Body (JSON)**:
-```json
-{
-    "COUNT": "10",
-    "START": "0",
-    "MOVIE_TITLE": "매트릭스",
-    "AUTHOR_NAME": "홍길동",
-    "CONTENT": "재미",
-    "SENTIMENT_LABEL": "negative",
-    "SENTIMENT_SCORE": "1",
-    "CREATED_START": "YYYY-MM-DD",
-    "CREATED_END": "YYYY-MM-DD"
-}
-```
-
-#### 11. 통합 리뷰 건수 집계 (페이징용)
-- **URL**: `POST /accessdata/getallreviewscount`
-- **Request Body (JSON)**: getallreviews와 동일, 단 COUNT/START 무시
----
-
 # Mission18 기술문서 (TECH.md)
 
 이 문서는 Mission18 프로젝트의 전체 소스 코드 구성, 상세 기술 명세 및 시스템 흐름을 설명합니다. 본 문서를 통해 프로젝트의 모든 구성 요소와 데이터 흐름을 완벽하게 파악할 수 있습니다.
@@ -173,50 +23,6 @@
 ## 2. 전체 시스템 구조 및 파이프라인 시각화
 
 ### 2.1 시스템 아키텍처 다이어그램 (System Architecture)
-```text
-
-┌─────────────────────────────────────────────────────────┐
-│                   Frontend: Streamlit                   │
-│          ┌───────────────────────────────────┐          │
-│          │         * Streamlit UI            │          │
-│          └─────────────────┬─────────────────┘          │
-│                            │                            │
-│          ┌─────────────────▼─────────────────┐          │
-│          │      call_api.py: API Client  │          │
-│          └─────────────────┬─────────────────┘          │
-└────────────────────────────│────────────────────────────┘
-                             │
-                  POST /accessdata/*
-                             │
-┌────────────────────────────▼────────────────────────────┐
-│                    Backend: FastAPI                     │
-│          ┌───────────────────────────────────┐          │
-│          │      [🛣️]  backend.py: Router     │          │
-│          └─────────────────┬─────────────────┘          │
-│                            │                            │
-│          ┌─────────────────▼─────────────────┐          │
-│          │   [⚙️] api2db.py: Business Logic   │          │
-│          └───────────┬───────────────┬───────┘          │
-│                      │               │                  │
-│          ┌───────────▼───────┐ ┌─────▼───────────────┐  │
-│          │ [🔌] dbclient.py  │ │ [🧠] models/:       │  │
-│          │      DB Client    │ │      HF/Ollama      │  │
-│          └───────────▲───────┘ └─────────────────────┘  │
-└──────────────────────│──────────────────────────────────┘
-                       │
-┌──────────────────────│──────────────────────────────────┐
-│              Storage / External                         │
-│   ┌──────────────────┴──────────────┐                   │
-│   │     [🔗]  KMDB Open API         │                   │
-│   └──────────────────┬──────────────┘                   │
-│            대량 수집 (m18_collect.py)                   │
-│                      │                                  │
-│              ┌───────▼───────┐                          │
-│              │ [🗄️] SQLite DB  │                          │
-│              └───────────────┘                          │
-└─────────────────────────────────────────────────────────┘
-
-```
 
 ```mermaid
 graph TD
@@ -233,7 +39,7 @@ graph TD
     end
 
     subgraph Storage [Storage / External]
-        DB[(SQLite DB)]
+        DB[(SQLite/Oracle DB)]
         KMDB[KMDB Open API]
     end
 
@@ -249,38 +55,12 @@ graph TD
 ### 2.2 리뷰 감성 분석 파이프라인 (Sequence Flow)
 사용자가 리뷰를 등록할 때 발생하는 자동 감성 분석의 백엔드 흐름입니다.
 
-```text
-👤 사용자(FE)        ⚙️ 백엔드(api2db)        🤖 AI 모델            🗄️ 데이터베이스
-     │                     │                     │                     │
-     │ 1. ✍️ 리뷰 등록 요청  │                     │                     │
-     ├────────────────────►│                     │                     │
-     │                     │ 2. 📋 모델 설정 확인  │                     │
-     │                     ├───────────► (m18.ini 등 설정 로드)          │
-     │                     │                     │                     │
-     │                     │ 3. 🧠 텍스트 분석 요청│                     │
-     │                     ├────────────────────►│                     │
-     │                     │                     │                     │
-     │                     │ 4-A. ✅ 분석 성공 결과│                     │
-     │                     │◄────────────────────┤                     │
-     │                     │                     │                     │
-     │                     │ 4-B. ⚠️ 분석 실패 시 대체 로직(Fallback) 수행 │
-     │                     ├───────────► (키워드 기반 분석/defines.py)   │
-     │                     │                     │                     │
-     │                     │ 5. 💾 평점/분석결과 DB 저장(INSERT)         │
-     │                     ├──────────────────────────────────────────►│
-     │                     │                     │                     │
-     │                     │ 6. 🆗 DB 저장 확인    │                     │
-     │                     │◄──────────────────────────────────────────┤
-     │ 7. 🔄 화면 갱신 완료  │                     │                     │
-     │◄────────────────────┤                     │                     │
-```
-
 ```mermaid
 sequenceDiagram
     participant User as 사용자 (Frontend)
     participant BE as Backend (api2db)
     participant Model as Sentiment Model
-    participant DB as SQLite DB
+    participant DB as SQLite/Oracle DB
 
     User->>BE: 리뷰 등록 요청 (movieId, 본문 텍스트)
     BE->>BE: m18.ini에서 설정된 모델 엔진 확인
@@ -351,13 +131,6 @@ sequenceDiagram
 
 ### 4.1 데이터 수집 및 정제 시스템 파이프라인 (`m18_collect.py`)
 
-```text
-[🌐 KMDB API 조회] ──► [📥 JSON 수신] ──► [🔠 정규화/소문자 변환] 
-                                                    │
-                                                    ▼
-[💾 ︎MOVIES 테이블 INSERT] ◄── [🧩 로컬 스키마 매핑] ◄── [🧹 태그/HTML 자체 정제]
-```
-
 ```mermaid
 flowchart LR
     KMDB(KMDB API 조회) --> JSON(JSON 텍스트 수신)
@@ -383,6 +156,42 @@ flowchart LR
 
 ## 5. 데이터베이스 구조 (Summary)
 
+### 5.1 데이터베이스 ERD (Entity Relationship Diagram - Oracle 기준)
+
+```mermaid
+erDiagram
+    MOVIES ||--o{ REVIEWS : "has"
+    
+    MOVIES {
+        NUMBER movieId PK "내부 일련번호 (Sequence)"
+        VARCHAR2 docid UK "KMDB 문서 ID"
+        VARCHAR2 title "영화 제목"
+        VARCHAR2 releaseDate "개봉일"
+        CLOB plot "줄거리"
+        VARCHAR2 directorNm "감독명"
+        VARCHAR2 genre "장르"
+        VARCHAR2 posterUrl "포스터 URL"
+        DATE createdAt "테이블 생성 시점"
+    }
+
+    REVIEWS {
+        NUMBER reviewId PK "리뷰 일련번호 (Sequence)"
+        NUMBER movieId FK "대상 영화 ID (MOVIES 참조)"
+        VARCHAR2 authorName "작성자 닉네임"
+        VARCHAR2 content "리뷰 내용"
+        VARCHAR2 sentimentLabel "AI 감성 라벨 (positive/neutral/negative)"
+        NUMBER sentimentScore "AI 감성 점수 (1~5)"
+        DATE createdAt "작성 일시"
+    }
+
+    MOVIE_USER {
+        VARCHAR2 user_id PK "사용자 계정 ID"
+        VARCHAR2 user_name "사용자 실명/닉네임"
+        VARCHAR2 user_pw "사용자 비밀번호"
+    }
+```
+
+### 5.2 상세 테이블 명세
 
 ### MOVIES (영화 데이터)
 | 필드명 | 타입 | 설명 |
